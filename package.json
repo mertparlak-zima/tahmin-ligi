@@ -9,6 +9,7 @@
     "demo": "npm run build && node scripts/demo-server.mjs",
     "dev:db": "node --env-file=.env scripts/dev-server.mjs",
     "check:db": "node --env-file=.env scripts/check-supabase.mjs",
+    "test:server": "node scripts/tests/server.test.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@geajs/vite-plugin": "^1.0.0",
+    "playwright": "^1.64.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.0"
   }

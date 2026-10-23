@@ -2,6 +2,7 @@
 
 import { Store } from '@geajs/core'
 import leagueStore from './league-store'
+import { dateKey } from '../utils/format'
 
 const IDENTITY_KEY = 'tahminligi.identity'
 
@@ -55,6 +56,30 @@ class UiStore extends Store {
 
   get identity(): any | null {
     return this.playerIndex[this.identityId] ?? null
+  }
+
+  /** Kimliğin açılmış tahminleri: bitmişler (yeniden eskiye) + başlamışlar (yakına). */
+  get myMatches(): any[] {
+    if (!this.identityId) return []
+    const matches: any[] = leagueStore.data?.matches ?? []
+    const mine = matches.filter(m => m.predictions.some((p: any) => p.playerId === this.identityId))
+    const revealed = mine.filter(m => m.predictionsVisible)
+    const finished = revealed
+      .filter(m => m.isFinished)
+      .sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
+    const started = revealed
+      .filter(m => !m.isFinished)
+      .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+    return [...finished, ...started]
+  }
+
+  /** Mühürlü (henüz açılmamış) tahmin sayısı. */
+  get sealedCount(): number {
+    if (!this.identityId) return 0
+    const matches: any[] = leagueStore.data?.matches ?? []
+    return matches.filter(
+      m => !m.predictionsVisible && m.predictions.some((p: any) => p.playerId === this.identityId)
+    ).length
   }
 
   toast(message: string) {

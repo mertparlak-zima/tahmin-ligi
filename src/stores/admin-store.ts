@@ -2,6 +2,7 @@
 
 import { Store } from '@geajs/core'
 import uiStore from './ui-store'
+import { dateKey } from '../utils/format'
 
 const ADMIN_KEY = 'tahminligi.admin'
 
@@ -56,7 +57,6 @@ class AdminStore extends Store {
       await this.bootstrap()
     } catch (err: any) {
       this.error = err.message
-      throw err
     } finally {
       this.loading = false
     }
@@ -130,6 +130,25 @@ class AdminStore extends Store {
     const matches: any[] = this.data?.matches ?? []
     const list = this.editorFilter === 'open' ? matches.filter(m => !m.locked) : matches
     return [...list].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+  }
+
+  get players(): any[] {
+    return this.data?.players ?? []
+  }
+
+  get openMatchCount(): number {
+    return (this.data?.matches ?? []).filter(m => !m.locked).length
+  }
+
+  /** Editör maçları gün bazında. */
+  get editorDays(): Array<{ day: string; matches: any[] }> {
+    const byDay = new Map<string, any[]>()
+    for (const match of this.editorMatches) {
+      const key = dateKey(match.kickoff)
+      if (!byDay.has(key)) byDay.set(key, [])
+      byDay.get(key).push(match)
+    }
+    return [...byDay.entries()].map(entry => ({ day: entry[0], matches: entry[1] }))
   }
 
   get dirtyItems(): Array<{ matchId: string; outcome: string }> {

@@ -1,5 +1,6 @@
 import leagueStore from '../stores/league-store'
-import { cn } from '../utils/cn'
+import SegButton from './SegButton'
+import CompOption from './CompOption'
 import type { StatusFilter } from '../stores/league-store'
 
 const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
@@ -10,29 +11,28 @@ const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
 ]
 
 export default function FilterBar() {
-  const comps = leagueStore.data?.competitions ?? []
   return (
     <div class="filter-bar">
       <div class="segmented" role="tablist" aria-label="Maç durumu">
         {STATUS_TABS.map(tab => (
-          <button
-            class={cn('seg-item', leagueStore.statusFilter === tab.key && 'active')}
+          <SegButton
             key={tab.key}
-            click={() => (leagueStore.statusFilter = tab.key)}
-          >
-            {tab.label}
-            {tab.key === 'live' && leagueStore.hasLive ? <span class="seg-live-dot"></span> : null}
-          </button>
+            active={leagueStore.statusFilter === tab.key}
+            label={tab.label}
+            hasLive={tab.key === 'live' && leagueStore.hasLive}
+            onSelect={() => (leagueStore.statusFilter = tab.key)}
+          />
         ))}
       </div>
       <select
         class="comp-select"
         aria-label="Turnuva"
+        value={leagueStore.competitionFilter}
         change={e => (leagueStore.competitionFilter = (e.target as HTMLSelectElement).value)}
       >
-        <option value="all" selected={leagueStore.competitionFilter === 'all'}>Tüm kupalar</option>
-        {comps.map((c: any) => (
-          <option value={c.code} selected={leagueStore.competitionFilter === c.code}>{c.name}</option>
+        <option value="all">Tüm kupalar</option>
+        {leagueStore.competitions.map((c: any) => (
+          <CompOption key={c.code} value={c.code} label={c.name} />
         ))}
       </select>
     </div>

@@ -4,6 +4,7 @@ import PredictionsTab from './admin/PredictionsTab'
 import PlayersTab from './admin/PlayersTab'
 import ScoringTab from './admin/ScoringTab'
 import DataTab from './admin/DataTab'
+import SkeletonCard from '../components/SkeletonCard'
 import { cn } from '../utils/cn'
 
 const TABS = [
@@ -53,7 +54,11 @@ export default class AdminPage extends Component {
     if (!adminStore.authed) return <LoginGate />
 
     if (adminStore.loading && !adminStore.data) {
-      return <div class="page-skeleton">{[0, 1, 2].map(i => <div class="skeleton-card" key={i}></div>)}</div>
+      return (
+        <div class="page-skeleton">
+          {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
+        </div>
+      )
     }
 
     if (adminStore.error && !adminStore.data) {
@@ -73,15 +78,18 @@ export default class AdminPage extends Component {
       <div class="admin-page">
         <div class="admin-head">
           <div class="admin-tabs">
-            {TABS.map(tab => (
-              <button
-                class={cn('admin-tab', adminStore.tab === tab.key && 'active')}
-                key={tab.key}
-                click={() => (adminStore.tab = tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
+            <button class={cn('admin-tab', adminStore.tab === 'predictions' && 'active')} click={() => (adminStore.tab = 'predictions')}>
+              Tahminler
+            </button>
+            <button class={cn('admin-tab', adminStore.tab === 'players' && 'active')} click={() => (adminStore.tab = 'players')}>
+              Oyuncular
+            </button>
+            <button class={cn('admin-tab', adminStore.tab === 'scoring' && 'active')} click={() => (adminStore.tab = 'scoring')}>
+              Puanlama
+            </button>
+            <button class={cn('admin-tab', adminStore.tab === 'data' && 'active')} click={() => (adminStore.tab = 'data')}>
+              Veri
+            </button>
           </div>
           <button class="btn ghost sm" click={() => adminStore.logout()}>Çıkış</button>
         </div>

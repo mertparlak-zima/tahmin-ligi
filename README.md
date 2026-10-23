@@ -72,24 +72,27 @@ env'e girilmezse kod içindeki varsayılanlarla çalışır.
 ### Yerel geliştirme
 
 ```bash
-npm run dev              # yalnız arayüz (API yok)
-npm run build            # üretim derlemesi
+npm run build             # üretim derlemesi (src değişince mutlaka)
+npm run dev               # yalnız arayüz (HMR; API için dev:api gerekir)
+npm run dev:api           # in-memory demo API — DB gerekmez, şifre: demo123
+npm run dev:db            # GERÇEK Supabase'li tam yığın (8787; .env gerekli)
+npm run demo              # build + in-memory demo sunucu
+npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
 ```
 
-Tam yığın yerel test için [Vercel CLI](https://vercel.com/docs/cli):
+### Testler
 
 ```bash
-vercel env pull .env.local
-vercel dev
+node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (giriş/mühür/kilit/benzersizlik)
+node --env-file=.env scripts/browser-check.mjs  # headless Chromium UI turu (sayfalar, sheet, admin)
+node scripts/tests/server.test.mjs              # sunucu katmanı (offline; espn/payload/admin/sync)
+node scripts/smoke-espn.mjs                     # gerçek ESPN çekimi (30 maç beklenir)
+node scripts/smoke-league.mjs                   # payload + puanlama + mühür (mock)
+node scripts/smoke-sync.mjs                     # upsert/anti-regression/prune (mock)
 ```
 
-### Duman testleri
-
-```bash
-node scripts/smoke-espn.mjs     # ESPN'den gerçek veri çeker
-node scripts/smoke-league.mjs   # payload + puanlama + mühür mantığı
-node scripts/smoke-sync.mjs     # upsert/anti-regression/prune mantığı
-```
+Agent kuralları ve öğrenilen Gea kısıtları için `AGENTS.md`; upstream'e
+bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 
 ## Kullanım
 
@@ -131,6 +134,14 @@ src/
   pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş, Admin (+admin sekmeleri)
   components/   DateStrip, MatchRow, MatchSheet, StandingsTable, Podium, ...
 ```
+
+## Üretim notları
+
+- Supabase free tier ~1 hafta hareketsizlikte projeyi duraklatır; ilk istek
+  yeniden canlandırır (ilk açılış birkaç saniye sürebilir).
+- `/api/league` bayat veri görünce senkronize olduğu için soğuk başlangıç +
+  senkron bir arada 3-8 sn sürebilir; arayüz iskelet gösterir.
+- Sezon geçişinde (Temmuz) önceki sezon maçları temizlenir; arşiv faz 2.
 
 ## Faz 2 fikirleri
 

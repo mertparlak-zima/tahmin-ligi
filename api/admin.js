@@ -154,7 +154,9 @@ export async function updatePlayer(supabase, request) {
     .update(patch)
     .eq('id', id)
     .select('id, name, color, is_active')
-    .single()
+    // maybeSingle: eşleşmeyen id'de gerçek supabase-js .single()'ı PGRST116
+    // hatasıyla reddeder ve 404 dalı çalışmazdı; maybeSingle data:null döndürür.
+    .maybeSingle()
   if (error) {
     if (error.code === '23505') return json(400, { error: 'Bu isimde bir oyuncu zaten var.' })
     return json(500, { error: `Oyuncu güncellenemedi: ${error.message}` })

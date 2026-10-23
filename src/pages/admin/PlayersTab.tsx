@@ -1,6 +1,6 @@
 import { Component } from '@geajs/core'
 import adminStore from '../../stores/admin-store'
-import { cn } from '../../utils/cn'
+import PlayerRow from './PlayerRow'
 
 export default class PlayersTab extends Component {
   newName = ''
@@ -41,18 +41,7 @@ export default class PlayersTab extends Component {
         </form>
 
         <div class="player-list">
-          {players.map(p => (
-            <div class="player-row" key={p.id}>
-              <span class="avatar" style={{ '--avatar-color': p.color } as any}>{p.initials}</span>
-              <span class="player-name">{p.name}</span>
-              <span class={cn('player-state', p.isActive ? 'active' : 'passive')}>
-                {p.isActive ? 'Aktif' : 'Pasif'}
-              </span>
-              <button class="btn ghost sm" click={() => adminStore.togglePlayer(p)}>
-                {p.isActive ? 'Pasif yap' : 'Aktifleştir'}
-              </button>
-            </div>
-          ))}
+          {players.map(p => <PlayerRow key={p.id} player={p} />)}
           {players.length === 0 ? <div class="empty">Henüz oyuncu yok.</div> : null}
         </div>
       </div>

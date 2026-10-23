@@ -1,10 +1,8 @@
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
-import Crest from '../components/Crest'
-import CompBadge from '../components/CompBadge'
-import { fmtFullDate, fmtTime, outcomeLabel } from '../utils/format'
-import { cn } from '../utils/cn'
+import Avatar from '../components/Avatar'
+import PredictionCard from '../components/PredictionCard'
 
 export default class MyPredictionsPage extends Component {
   created() {
@@ -36,25 +34,15 @@ export default class MyPredictionsPage extends Component {
       )
     }
 
-    const matches: any[] = leagueStore.data?.matches ?? []
-    const mine = matches.filter(m => m.predictions.some((p: any) => p.playerId === identity.id))
-    const revealed = mine.filter(m => m.predictionsVisible)
-    const sealed = mine.filter(m => !m.predictionsVisible)
-
-    const finished = revealed
-      .filter(m => m.isFinished)
-      .sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
-    const started = revealed
-      .filter(m => !m.isFinished)
-      .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
-
     const myRow = leagueStore.standings.find((r: any) => r.id === identity.id)
     const wrongCount = myRow ? myRow.played - myRow.correctOutcomes : 0
+    const myMatches = uiStore.myMatches
+    const sealed = uiStore.sealedCount
 
     return (
       <div class="mypage">
         <div class="identity-hero">
-          <span class="avatar xl" style={{ '--avatar-color': identity.color } as any}>{identity.initials}</span>
+          <Avatar color={identity.color} initials={identity.initials} size="xl" />
           <div class="identity-hero-text">
             <span class="identity-name">{identity.name}</span>
             <span class="identity-sub">
@@ -89,47 +77,16 @@ export default class MyPredictionsPage extends Component {
           </div>
         ) : null}
 
-        {finished.length === 0 && started.length === 0 ? (
+        {myMatches.length === 0 ? (
           <div class="empty">
             <div class="empty-title">Açılan tahmin yok</div>
             <div class="empty-sub">Maçlar başlayınca tahminlerin burada listelenir.</div>
           </div>
         ) : (
           <div class="pred-cards">
-            {[...finished, ...started].map(match => {
+            {uiStore.myMatches.map(match => {
               const pred = match.predictions.find((p: any) => p.playerId === identity.id)
-              return (
-                <button class="pred-card" key={match.id} click={() => uiStore.openSheet(match.id)}>
-                  <div class="pred-card-head">
-                    <CompBadge code={match.competitionCode} size="sm" />
-                    <span class="pred-card-date">{fmtFullDate(match.kickoff)}</span>
-                  </div>
-                  <div class="pred-card-teams">
-                    <div class="pred-card-side">
-                      <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={30} />
-                      <span>{match.home.short}</span>
-                      <span class="pred-card-score">{match.score ? match.score.home : '–'}</span>
-                    </div>
-                    <div class="pred-card-side">
-                      <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={30} />
-                      <span>{match.away.short}</span>
-                      <span class="pred-card-score">{match.score ? match.score.away : '–'}</span>
-                    </div>
-                  </div>
-                  <div class="pred-card-foot">
-                    <span class="pred-card-label">
-                      Tahminin: <b>{pred?.label ?? outcomeLabel(pred.outcome, match.home.short, match.away.short)}</b>
-                    </span>
-                    {match.isFinished ? (
-                      <span class={cn('pred-points', pred?.correct ? 'hit' : 'miss')}>
-                        {pred?.points ?? 0} P
-                      </span>
-                    ) : (
-                      <span class="pred-points pending">{match.isLive ? 'CANLI' : 'Bekliyor'}</span>
-                    )}
-                  </div>
-                </button>
-              )
+              return <PredictionCard key={match.id} match={match} pred={pred} />
             })}
           </div>
         )}

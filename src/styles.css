@@ -1031,9 +1031,14 @@ a {
   position: fixed;
   inset: 0;
   z-index: 70;
-  display: grid;
-  place-items: center;
+  display: none;
+  align-items: center;
+  justify-content: center;
   padding: 20px;
+}
+
+.modal-root.open {
+  display: grid;
 }
 
 .modal-backdrop {
@@ -1230,11 +1235,15 @@ a {
 }
 
 .podium {
+  display: none;
+  margin-bottom: 18px;
+  align-items: end;
+}
+
+.podium.has {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 9px;
-  margin-bottom: 18px;
-  align-items: end;
 }
 
 .podium-card {
@@ -2045,7 +2054,7 @@ a {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .podium {
+  .podium.has {
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
   }

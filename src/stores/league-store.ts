@@ -140,6 +140,34 @@ class LeagueStore extends Store {
     return this.data?.standings ?? []
   }
 
+  get players(): any[] {
+    return this.data?.players ?? []
+  }
+
+  get competitions(): any[] {
+    return this.data?.competitions ?? []
+  }
+
+  /** Podyum sırası: 2.-1.-3. */
+  get podiumOrder(): any[] {
+    const top3 = this.standings.slice(0, 3)
+    return top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3
+  }
+
+  /** Bitmiş maçlar gün bazında, en yeni gün önce. */
+  get resultsByDay(): Array<{ day: string; matches: any[] }> {
+    const finished = [...this.finishedMatches].sort(
+      (a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff)
+    )
+    const byDay = new Map<string, any[]>()
+    for (const match of finished) {
+      const key = dateKey(match.kickoff)
+      if (!byDay.has(key)) byDay.set(key, [])
+      byDay.get(key).push(match)
+    }
+    return [...byDay.entries()].map(entry => ({ day: entry[0], matches: entry[1] }))
+  }
+
   get hasLive(): boolean {
     return this.liveMatches.length > 0
   }

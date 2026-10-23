@@ -1,16 +1,17 @@
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
+import uiStore from '../stores/ui-store'
 import DateStrip from '../components/DateStrip'
 import FilterBar from '../components/FilterBar'
-import MatchRow from '../components/MatchRow'
-import { cn } from '../utils/cn'
+import CompGroup from '../components/CompGroup'
+import SkeletonCard from '../components/SkeletonCard'
 
 export default class MatchesPage extends Component {
   template() {
     if (leagueStore.loadingInitial) {
       return (
         <div class="page-skeleton">
-          {[0, 1, 2].map(i => <div class="skeleton-card" key={i}></div>)}
+          {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
         </div>
       )
     }
@@ -52,22 +53,7 @@ export default class MatchesPage extends Component {
           </div>
         ) : (
           groups.map(group => (
-            <section class="comp-group" key={group.code}>
-              <header class="comp-group-head">
-                <span class="comp-group-title">{group.name}</span>
-                <span class="comp-group-count">
-                  {group.matches.filter((m: any) => m.isLive).length > 0
-                    ? `${group.matches.filter((m: any) => m.isLive).length} canlı · `
-                    : ''}
-                  {group.matches.length} maç
-                </span>
-              </header>
-              <div class="match-list">
-                {group.matches.map((match: any) => (
-                  <MatchRow match={match} key={match.id} />
-                ))}
-              </div>
-            </section>
+            <CompGroup key={group.code} code={group.code} name={group.name} matches={group.matches} />
           ))
         )}
       </div>

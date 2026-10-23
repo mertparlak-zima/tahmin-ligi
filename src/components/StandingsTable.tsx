@@ -1,6 +1,6 @@
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
-import { cn } from '../utils/cn'
+import StandingsRow from './StandingsRow'
 
 export default function StandingsTable() {
   const rows = leagueStore.standings
@@ -23,23 +23,8 @@ export default function StandingsTable() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row: any) => (
-            <tr class={row.id === uiStore.identityId ? 'own-row' : ''} key={row.id}>
-              <td class={cn('col-rank', row.rank <= 3 && 'top')}>{row.rank}</td>
-              <td class="col-player">
-                <span class="cell-player">
-                  <span class="avatar sm" style={{ '--avatar-color': row.color } as any}>{row.initials}</span>
-                  <span>{row.name}</span>
-                  {row.id === uiStore.identityId ? <span class="you-tag">SEN</span> : null}
-                </span>
-              </td>
-              <td class="col-num">{row.played}</td>
-              <td class="col-num team-col">{row.teamCorrect.FB}</td>
-              <td class="col-num team-col">{row.teamCorrect.GS}</td>
-              <td class="col-num team-col">{row.teamCorrect.BJK}</td>
-              <td class="col-num team-col">{row.teamCorrect.TS}</td>
-              <td class="col-num points">{row.points}</td>
-            </tr>
+          {rows.map(row => (
+            <StandingsRow key={row.id} row={row} isOwn={row.id === uiStore.identityId} />
           ))}
         </tbody>
       </table>
