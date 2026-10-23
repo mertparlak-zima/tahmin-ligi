@@ -153,13 +153,21 @@ if (await loginInput.count() > 0) {
     } catch {
       check('dirty bar görünür', false, 'save-bar görünmedi')
     }
-    // kaydet ve tostu doğrula
-    await page.locator('.save-bar .btn').click()
-    try {
-      await page.waitForSelector('.toast', { timeout: 10000 })
-      check('kaydetme toastı', true)
-    } catch {
-      check('kaydetme toastı', false, '10s içinde toast görünmedi')
+    // Kaydetme testi yalnız açık izinle (BROWSER_CHECK_ALLOW_SAVE=1) çalışır;
+    // aksi halde gerçek tahmin verisi değiştirilmez (lokal dev:db de gerçek
+    // Supabase'i kullanır!).
+    if (process.env.BROWSER_CHECK_ALLOW_SAVE) {
+      await page.locator('.save-bar .btn').click()
+      try {
+        await page.waitForSelector('.toast', { timeout: 10000 })
+        check('kaydetme toastı', true)
+      } catch {
+        check('kaydetme toastı', false, '10s içinde toast görünmedi')
+      }
+    } else {
+      console.log('  bilgi: kaydetme testi atlandı (BROWSER_CHECK_ALLOW_SAVE yok — gerçek veri korunur)')
+      await page.reload()
+      await page.waitForTimeout(2500)
     }
   } else {
     check('dirty bar görünür', false, 'açık maç select yok')
