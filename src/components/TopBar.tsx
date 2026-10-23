@@ -25,9 +25,10 @@ export default function TopBar() {
           <button
             class={cn('icon-btn', leagueStore.loading && 'spinning')}
             aria-label="Yenile"
-            click={() => {
-              leagueStore.refresh()
-              uiStore.toast('Veriler yenilendi.')
+            click={async () => {
+              await leagueStore.refresh()
+              if (!leagueStore.error) uiStore.toast('Veriler yenilendi.')
+              else uiStore.toast('Yenileme başarısız oldu.')
             }}
           >
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
