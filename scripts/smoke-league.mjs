@@ -12,6 +12,7 @@ const players = [
   { id: 'p1', name: 'Ogün', color: '#b8f34a', is_active: true },
   { id: 'p2', name: 'Mert', color: '#5ce1e6', is_active: true },
   { id: 'p3', name: 'Eski', color: '#ff9f68', is_active: false },
+  { id: 'p4', name: 'Bonuslu', color: '#ffd05c', is_active: true, bonus_points: 2 },
 ]
 
 const matches = [
@@ -45,6 +46,7 @@ const predictions = [
   { player_id: 'p2', match_id: 'm1', outcome: 'A' }, // doğru → 1 puan
   { player_id: 'p2', match_id: 'm2', outcome: 'D' }, // yanlış
   { player_id: 'p3', match_id: 'm1', outcome: 'A' }, // pasif oyuncu → sayılmamalı
+  { player_id: 'p4', match_id: 'm1', outcome: 'A' }, // doğru → 1 + 2 bonus = 3 puan
 ]
 
 function mockSupabase() {
@@ -84,7 +86,7 @@ const payload = await buildLeaguePayload(mockSupabase())
 // --- Temel ---
 assert.equal(payload.meta.counts.matches, 3)
 assert.equal(payload.meta.counts.finished, 2)
-assert.equal(payload.players.length, 2, 'pasif oyuncu listede olmamalı')
+assert.equal(payload.players.length, 3, 'pasif oyuncu listede olmamalı (3 aktif: Ogün, Mert, Bonuslu)')
 
 // --- Mühür ---
 const future = payload.matches.find(m => m.id === 'm3')
@@ -112,6 +114,11 @@ assert.equal(mert.missed, 0)
 assert.equal(ogun.teamCorrect.BJK, 1)
 // p2 m1 (Galatasaray maçı, Barcelona yener) doğru → GS=1
 assert.equal(mert.teamCorrect.GS, 1)
+
+// Bonus puan: p4 doğru sonuç (1) + bonus (2) = 3
+const bonuslu = payload.standings.find(r => r.id === 'p4')
+assert.equal(bonuslu.points, 3)
+assert.equal(bonuslu.bonusPoints, 2)
 
 // Sıralama: eşit puan → doğru sayısı → isim
 assert.equal(payload.standings[0].rank, 1)
