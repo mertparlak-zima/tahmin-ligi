@@ -210,18 +210,21 @@ export async function sync(supabase) {
 }
 
 // --- Yönlendirici ---
+// Vercel web-standard imza: NAMED METHOD export'ları (GET/POST/PUT/PATCH).
+// (Varsayılan export, Vercel'de legacy (req,res) imzası sanılıp dönüşü yok
+// sayıyordu → 30 sn FUNCTION_INVOCATION_TIMEOUT. Bkv. commit geçmişi.)
 
-export default async function handler(request) {
+async function route(request) {
   const path = new URL(request.url).pathname.replace(/\/+$/, '')
-  const route = `${request.method} ${path}`
+  const routeKey = `${request.method} ${path}`
 
   try {
-    if (route === 'POST /api/admin/login') return await login(request)
+    if (routeKey === 'POST /api/admin/login') return await login(request)
 
     if (!passwordOk(bearer(request))) return json(401, { error: 'Yetkisiz.' })
     const supabase = getSupabase()
 
-    switch (route) {
+    switch (routeKey) {
       case 'GET /api/admin/bootstrap':
         return await bootstrap(supabase)
       case 'PUT /api/admin/predictions':
@@ -241,4 +244,20 @@ export default async function handler(request) {
     console.error('/api/admin error:', err.message)
     return json(500, { error: 'İşlem başarısız.', detail: err.message })
   }
+}
+
+export async function GET(request) {
+  return route(request)
+}
+
+export async function POST(request) {
+  return route(request)
+}
+
+export async function PUT(request) {
+  return route(request)
+}
+
+export async function PATCH(request) {
+  return route(request)
 }

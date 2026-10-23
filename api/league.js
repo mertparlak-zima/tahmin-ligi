@@ -1,5 +1,6 @@
 // GET /api/league — herkese açık lig verisi.
 // Veri bayatsa (varsayılan 90 sn) önce senkronize eder, sonra döndürür.
+// Not: Vercel web-standard imza için NAMED METHOD export ister (export function GET).
 
 import { getSupabase } from '../lib/supabase.js'
 import { maybeSync } from '../lib/sync.js'
@@ -15,7 +16,7 @@ const json = (status, body) =>
     },
   })
 
-export default async function handler(request) {
+export async function GET(request) {
   if (request.method !== 'GET') return json(405, { error: 'Yalnızca GET desteklenir.' })
   try {
     const supabase = getSupabase()

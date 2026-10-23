@@ -11,8 +11,15 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import leagueHandler from '../api/league.js'
-import adminHandler from '../api/admin.js'
+import { GET as leagueGET } from '../api/league.js'
+import * as adminApi from '../api/admin.js'
+
+const adminMethods = {
+  GET: adminApi.GET,
+  POST: adminApi.POST,
+  PUT: adminApi.PUT,
+  PATCH: adminApi.PATCH,
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.join(__dirname, '..', 'dist')
@@ -58,7 +65,9 @@ const server = http.createServer(async (req, res) => {
         headers: req.headers,
         body,
       })
-      const handler = url.pathname.startsWith('/api/admin') ? adminHandler : leagueHandler
+      const handler = url.pathname.startsWith('/api/admin')
+        ? adminMethods[req.method] ?? adminApi.GET
+        : leagueGET
       const response = await handler(webReq)
       res.writeHead(response.status, Object.fromEntries(response.headers))
       res.end(await response.text())
