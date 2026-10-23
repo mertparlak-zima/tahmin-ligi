@@ -4,7 +4,10 @@ import uiStore from '../stores/ui-store'
 import { fmtFullDate } from '../utils/format'
 import { cn } from '../utils/cn'
 
-export default function PredictionCard({ match, pred }: { match: any; pred: any }) {
+export default function PredictionCard({ match, identityId }: { match: any; identityId: string }) {
+  const pred = identityId
+    ? match.predictions.find((p: any) => p.playerId === identityId)
+    : null
   return (
     <button class="pred-card" click={() => uiStore.openSheet(match.id)}>
       <div class="pred-card-head">

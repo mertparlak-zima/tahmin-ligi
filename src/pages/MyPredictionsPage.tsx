@@ -84,10 +84,9 @@ export default class MyPredictionsPage extends Component {
           </div>
         ) : (
           <div class="pred-cards">
-            {uiStore.myMatches.map(match => {
-              const pred = match.predictions.find((p: any) => p.playerId === identity.id)
-              return <PredictionCard key={match.id} match={match} pred={pred} />
-            })}
+            {uiStore.myMatches.map(match => (
+              <PredictionCard key={match.id} match={match} identityId={uiStore.identityId} />
+            ))}
           </div>
         )}
       </div>

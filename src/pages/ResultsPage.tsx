@@ -23,7 +23,7 @@ export default class ResultsPage extends Component {
           {identity ? <span class="meta-side">{identity.name} puanları gösteriliyor</span> : null}
         </div>
         {leagueStore.resultsByDay.map(g => (
-          <ResultDay key={g.day} day={g.day} matches={g.matches} identityId={identity?.id ?? ''} />
+          <ResultDay key={g.day} day={g.day} matches={g.matches} identityId={uiStore.identityId} />
         ))}
       </div>
     )

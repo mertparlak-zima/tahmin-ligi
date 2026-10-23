@@ -60,6 +60,11 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
    component etiketi yok, `<option selected={...}>` yerine
    `<select value={...}>` kullan, `.map(([a,b]) => ...)` dizi
    destructuring'i yok (`entry[0]`/nesne dizisi kullan).
+9. **Map callback'leri template-body `const`'larına kapanmaz** — liste
+   binding'i reaktif güncellemede eski (stal) kapanışla yeniden değerlenir;
+   `identity.id` gibi ifadeler null'da patlar. Callback içinde yalnızca
+   doğrudan STORE erişimi kullan (`uiStore.identityId`), hesaplamayı item
+   component'in kendi prop'larına taşı (bkv. PredictionCard).
 
 ## Sözleşmeler
 
