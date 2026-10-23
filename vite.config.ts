@@ -6,4 +6,11 @@ export default defineConfig({
   build: {
     modulePreload: { polyfill: false },
   },
+  server: {
+    proxy: {
+      // npm run dev (HMR) sırasında API'yi demo sunucusuna aktarır.
+      // Önce: npm run dev:api
+      '/api': 'http://localhost:8787',
+    },
+  },
 })

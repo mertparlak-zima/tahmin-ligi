@@ -5,11 +5,14 @@ create extension if not exists pgcrypto;
 
 create table if not exists players (
   id         uuid primary key default gen_random_uuid(),
-  name       text not null unique,
+  name       text not null,
   color      text not null default '#b8f34a',
   is_active  boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- "Ali" ile "ali" aynı oyuncu sayılır: benzersizlik küçük harfe göre.
+create unique index if not exists players_name_key on players (lower(name));
 
 create table if not exists matches (
   id                   uuid primary key default gen_random_uuid(),

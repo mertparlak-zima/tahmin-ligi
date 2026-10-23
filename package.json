@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node scripts/demo-server.mjs",
+    "demo": "npm run build && node scripts/demo-server.mjs",
+    "dev:db": "node --env-file=.env scripts/dev-server.mjs",
+    "check:db": "node --env-file=.env scripts/check-supabase.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

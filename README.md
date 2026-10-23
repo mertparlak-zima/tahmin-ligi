@@ -63,8 +63,9 @@ npm install
 | `SUPABASE_URL` | Supabase proje URL'i |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role anahtarı (yalnız server'da) |
 | `ADMIN_PASSWORD` | Yönetim paneli şifresi (güçlü seç) |
-| `SYNC_STALE_SECONDS` | Opsiyonel; lazy sync eşiği (varsayılan 90) |
-| `LEAGUE_NAME` | Opsiyonel; sayfa başlığı |
+
+Bu üçü zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
+env'e girilmezse kod içindeki varsayılanlarla çalışır.
 
 3. Deploy. İlk ziyarette fikstür otomatik çekilir.
 

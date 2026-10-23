@@ -36,20 +36,20 @@ const colorOk = c => /^#[0-9a-fA-F]{6}$/.test(c ?? '')
 
 const cleanName = raw => String(raw ?? '').replace(/\s+/g, ' ').trim()
 
-// --- Uçlar ---
+// --- Uçlar (demo sunucusu da yeniden kullanır; export'lar test amaçlı) ---
 
-async function login(request) {
+export async function login(request) {
   const body = await request.json().catch(() => ({}))
   if (!passwordOk(body.password)) return json(401, { error: 'Şifre hatalı.' })
   return json(200, { ok: true })
 }
 
-async function bootstrap(supabase) {
+export async function bootstrap(supabase) {
   const payload = await buildAdminPayload(supabase)
   return json(200, payload)
 }
 
-async function savePredictions(supabase, request) {
+export async function savePredictions(supabase, request) {
   const body = await request.json().catch(() => ({}))
   const playerId = body.playerId
   const items = Array.isArray(body.items) ? body.items : null
@@ -109,7 +109,7 @@ async function savePredictions(supabase, request) {
   return json(200, { ok: true, saved: upserts.length, deleted: deletes.length, player: player.name })
 }
 
-async function createPlayer(supabase, request) {
+export async function createPlayer(supabase, request) {
   const body = await request.json().catch(() => ({}))
   const name = cleanName(body.name)
   if (name.length < 2 || name.length > 40) {
@@ -131,7 +131,7 @@ async function createPlayer(supabase, request) {
   return json(201, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
 }
 
-async function updatePlayer(supabase, request) {
+export async function updatePlayer(supabase, request) {
   const body = await request.json().catch(() => ({}))
   const { id } = body
   if (!id) return json(400, { error: 'id gerekli.' })
@@ -163,7 +163,7 @@ async function updatePlayer(supabase, request) {
   return json(200, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
 }
 
-async function saveScoring(supabase, request) {
+export async function saveScoring(supabase, request) {
   const body = await request.json().catch(() => ({}))
   const { data: current } = await supabase
     .from('app_config')
@@ -198,7 +198,7 @@ async function saveScoring(supabase, request) {
   return json(200, { ok: true, scoring })
 }
 
-async function sync(supabase) {
+export async function sync(supabase) {
   try {
     const result = await syncNow(supabase)
     return json(200, { ok: true, ...result })
