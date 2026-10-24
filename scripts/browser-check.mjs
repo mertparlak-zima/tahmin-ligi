@@ -13,6 +13,12 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
+// Mobil regresım bekçisi (#15): sayfa düzeyinde yatay taşma olmamalı.
+const noOverflow = async name => {
+  const over = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth)
+  check(`${name} yatay taşma yok`, over <= 1, `${over}px`)
+}
+
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } }) // mobil görünüm
 
@@ -53,6 +59,7 @@ const todayCells = await page.locator('.cal-cell.today').count()
 check('bugün hücresi vurgulu', todayCells === 1)
 const calChips = await page.locator('.cal-chip').count()
 check('fikstür chipleri render', calChips > 0, `${calChips} chip`)
+await noOverflow('maçlar')
 
 // Maçlı bir gün seç (bugün maç olmayabilir)
 const dayWithMatches = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
@@ -183,6 +190,7 @@ if (await anyRow.count() > 0) {
 await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
 await page.waitForTimeout(500)
 check('puan sayfası', (await page.locator('.standings-page, .empty').count()) > 0)
+await noOverflow('puan durumu')
 const standingsRows = await page.locator('.standings-table tbody tr').count()
 if (standingsRows > 0) {
   check('puan tablosu satırları', standingsRows > 0, `${standingsRows} satır`)
@@ -260,6 +268,7 @@ if (await loginInput.count() > 0) {
   // tahmin editörü
   const editorRows = await page.locator('.editor-row').count()
   check('tahmin editörü satırları', editorRows > 0, `${editorRows} satır`)
+  await noOverflow('admin editör')
 
   // bir select değiştir → dirty bar (önceki koşuda kaydedilen değerden farklı seç)
   const openSelect = page.locator('.editor-select:not([disabled])').first()

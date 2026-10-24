@@ -2123,6 +2123,13 @@ a {
   border-radius: 13px;
   background: var(--surface);
   border: 1px solid var(--line);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-tab {
@@ -2463,6 +2470,8 @@ a {
   .sheet {
     border-radius: 22px 22px 0 0;
     padding: 8px 16px 22px;
+    /* Çentikli ekranlarda home göstergesi içeriği ezmesin (#15). */
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
   }
 
   .pred-row {
@@ -2547,6 +2556,13 @@ a {
 
   .identity-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* 360px'e kadar admin sekmeleri sıkışır: dar padding + küçük punto
+     (#15 denetimi: 360px'de 16px sayfa taşmasının kök nedeni). */
+  .admin-tab {
+    padding: 7px 10px;
+    font-size: 12px;
   }
 }
 
