@@ -1,4 +1,4 @@
-import MatchRow from './MatchRow'
+import MatchItem from './MatchItem'
 
 export default function CompGroup({ code, name, matches }: { code: string; name: string; matches: any[] }) {
   const liveCount = matches.filter(m => m.isLive).length
@@ -11,7 +11,7 @@ export default function CompGroup({ code, name, matches }: { code: string; name:
         </span>
       </header>
       <div class="match-list">
-        {matches.map(match => <MatchRow key={match.id} match={match} />)}
+        {matches.map(match => <MatchItem key={match.id} match={match} />)}
       </div>
     </section>
   )

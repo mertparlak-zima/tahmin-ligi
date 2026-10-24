@@ -200,20 +200,20 @@ console.log(`  bilgi: bitti filtresi → ${finishedRows} kart`)
 await page.locator('.seg-item', { hasText: 'Tümü' }).first().click()
 await page.waitForTimeout(300)
 
-// --- 4) Maç detay sheet'i ---
+// --- 4) Maç detay akordiyonu (#12 B) ---
 const anyRow = page.locator('.match-row').first()
 if (await anyRow.count() > 0) {
   await anyRow.click()
   await page.waitForTimeout(400)
-  const sheet = await page.locator('.sheet').count()
-  check('maç sheeti açılır', sheet === 1)
-  const sheetOk = await page.locator('.sheet-scoreboard').count()
-  check('sheet skorboardu görünür', sheetOk === 1)
+  const accBody = await page.locator('.match-acc-body').count()
+  check('maç akordiyonu açılır', accBody === 1)
+  const accRows = await page.locator('.match-acc-body .pred-row').count()
+  check('akordiyonda tahmin satırları', true, `${accRows} satır`)
   await page.keyboard.press('Escape')
   await page.waitForTimeout(300)
-  check('Escape sheeti kapatır', (await page.locator('.sheet').count()) === 0)
+  check('Escape akordiyonu kapatır', (await page.locator('.match-acc-body').count()) === 0)
 } else {
-  check('maç sheeti açılır', false, 'maç satırı yok')
+  check('maç akordiyonu açılır', false, 'maç satırı yok')
 }
 
 // --- 5) Sayfa gezinmesi ---

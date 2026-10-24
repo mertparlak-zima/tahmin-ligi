@@ -5,7 +5,6 @@ import uiStore from './stores/ui-store'
 import adminStore from './stores/admin-store'
 import TopBar from './components/TopBar'
 import MainNav from './components/MainNav'
-import MatchSheet from './components/MatchSheet'
 import IdentityModal from './components/IdentityModal'
 import DatePreviewPopover from './components/DatePreviewPopover'
 import Toasts from './components/Toasts'
@@ -18,7 +17,7 @@ export default class App extends Component {
     })
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        uiStore.closeSheet()
+        uiStore.closeMatchAccordion()
         uiStore.closeIdentityModal()
       }
     })
@@ -46,7 +45,6 @@ export default class App extends Component {
             <span class="footer-right">Veri: ESPN</span>
             <Link to="/admin" class="footer-admin">Yönetim</Link>
           </footer>
-          <MatchSheet />
           <IdentityModal />
           <Toasts />
         </div>

@@ -1,3 +1,6 @@
+// Maç satırı (#12 B — kalıcı akordiyon): tıkla → altında tahminler açılır.
+// MatchItem sarmalayıcısı accordion içeriği sağlar.
+
 import Crest from './Crest'
 import CompBadge from './CompBadge'
 import leagueStore from '../stores/league-store'
@@ -5,12 +8,13 @@ import uiStore from '../stores/ui-store'
 import { fmtTime } from '../utils/format'
 import { cn } from '../utils/cn'
 
-export default function MatchRow({ match }: { match: any }) {
+export default function MatchRow({ match, onToggle }: { match: any; onToggle: () => void }) {
   const homeScore = match.score?.home ?? null
   const awayScore = match.score?.away ?? null
   const dimHome = match.isFinished && homeScore !== null && awayScore !== null && homeScore < awayScore
   const dimAway = match.isFinished && homeScore !== null && awayScore !== null && homeScore > awayScore
   const stale = match.isLive && leagueStore.staleActive
+  const isOpen = uiStore.openMatchId === match.id
 
   const slot =
     match.statusGroup === 'inactive'
@@ -26,7 +30,11 @@ export default function MatchRow({ match }: { match: any }) {
           : { cls: 'upcoming', main: fmtTime(match.kickoff), sub: '' }
 
   return (
-    <button class={cn('match-row', match.isLive && 'is-live')} click={() => uiStore.openSheet(match.id)}>
+    <button
+      class={cn('match-row', match.isLive && 'is-live', isOpen && 'acc-open')}
+      aria-expanded={String(isOpen)}
+      click={onToggle}
+    >
       <div class={cn('slot', slot.cls, stale && 'stale')}>
         <span class="slot-main">{slot.main}</span>
         {slot.sub ? <span class="slot-sub">{slot.sub}</span> : null}
@@ -56,9 +64,9 @@ export default function MatchRow({ match }: { match: any }) {
           </span>
         ) : null}
       </div>
-      <span class="row-chevron" aria-hidden="true">
+      <span class={cn('row-chevron', isOpen && 'open')} aria-hidden="true">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 6l6 6-6 6" />
+          <path d="M6 9l6 6 6-6" />
         </svg>
       </span>
     </button>

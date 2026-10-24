@@ -7,12 +7,13 @@ import { dateKey } from '../utils/format'
 const IDENTITY_KEY = 'tahminligi.identity'
 
 class UiStore extends Store {
-  sheetMatchId: string | null = null
   identityModalOpen = false
   toasts: Array<{ id: number; message: string }> = []
   identityId = ''
   /** Oyuncular sayfası detay görünümü (#20 U8): '' = kart listesi. */
   selectedPlayerId = ''
+  /** Maç detay akordiyonu (#12 B): açık maçın id'si; null = kapalı. */
+  openMatchId: string | null = null
   datePreviewKey = ''
   datePreviewRect: { left: number; top: number; bottom: number; width: number } | null = null
 
@@ -38,16 +39,6 @@ class UiStore extends Store {
     leagueStore.observe('data', rebuildIndex)
   }
 
-  openSheet(matchId: string) {
-    this.sheetMatchId = matchId
-    document.body.classList.add('sheet-open')
-  }
-
-  closeSheet() {
-    this.sheetMatchId = null
-    document.body.classList.remove('sheet-open')
-  }
-
   openIdentityModal() {
     this.identityModalOpen = true
   }
@@ -65,6 +56,15 @@ class UiStore extends Store {
 
   closePlayerDetail() {
     this.selectedPlayerId = ''
+  }
+
+  /** Maç detay akordiyonu (#12 B): toggle — açık maçın id'si. */
+  toggleMatchAccordion(matchId: string) {
+    this.openMatchId = this.openMatchId === matchId ? null : matchId
+  }
+
+  closeMatchAccordion() {
+    this.openMatchId = null
   }
 
   /** Tarih chip önizlemesi: hover'daki günün maçları (yalnız masaüstü hover). */
