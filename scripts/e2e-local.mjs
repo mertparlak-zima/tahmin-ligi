@@ -104,12 +104,19 @@ const scoringGone = await api('/api/admin/scoring', {
 })
 check('puanlama ucu kapalı (404)', scoringGone.status === 404, `status=${scoringGone.status}`)
 
-// 12) Test oyuncusunu temizle (pasife al)
-const cleanup = await api('/api/admin/players', {
-  method: 'PATCH',
-  body: { id: playerId, isActive: false },
+// 12) Test oyuncusunu GERÇEKTEN sil (#6 izolasyon — pasife değil, silme)
+//    Önce kalan tahmini temizle (picks[0]'a girilen H hâlâ duruyor), sonra sil.
+const delPreds = await api('/api/admin/predictions', {
+  method: 'PUT',
+  body: { playerId, items: [{ matchId: picks[0].matchId, outcome: '' }] },
 })
-check('test oyuncusu pasife alındı', cleanup.status === 200)
+check('test tahminleri temizlendi', delPreds.status === 200, `status=${delPreds.status}`)
+
+const cleanup = await api('/api/admin/players', {
+  method: 'DELETE',
+  body: { id: playerId },
+})
+check('test oyuncusu silindi (#6)', cleanup.status === 200, `status=${cleanup.status}`)
 
 const failed = results.filter(r => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} test geçti ${failed.length === 0 ? '✅' : '❌'}`)

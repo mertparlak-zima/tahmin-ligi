@@ -2,10 +2,12 @@
 // Yetkilendirme: Authorization: Bearer <ADMIN_PASSWORD>
 
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { getSupabase } from '../lib/supabase.js'
+import { getSupabase, isReadonly } from '../lib/supabase.js'
 import { syncNow } from '../lib/sync.js'
 import { buildAdminPayload, DEFAULT_SCORING, initialsOf } from '../lib/league.js'
 import { isLocked } from '../lib/status.js'
+
+const READONLY_MSG = 'Salt-okunur mod: SUPABASE_SERVICE_ROLE_KEY tanımlı değil. Yazma işlemleri için .env dosyasına ekleyin.'
 
 const PLAYER_COLORS = ['#b8f34a', '#5ce1e6', '#ff9f68', '#ffd05c', '#c792ea', '#f78fb3', '#39dfb2', '#6db6ff']
 
@@ -163,6 +165,25 @@ export async function updatePlayer(supabase, request) {
   }
   if (!player) return json(404, { error: 'Oyuncu bulunamadı.' })
   return json(200, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
+}
+
+/** #6: Oyuncuyu GERÇEKTEN sil (test temizliği). Tahmini varsa reddeder. */
+export async function deletePlayer(supabase, request) {
+  const body = await request.json().catch(() => ({}))
+  const { id } = body
+  if (!id) return json(400, { error: 'id gerekli.' })
+
+  const { count } = await supabase
+    .from('predictions')
+    .select('id', { count: 'exact', head: true })
+    .eq('player_id', id)
+  if ((count ?? 0) > 0) {
+    return json(409, { error: `Oyuncunun ${count} tahmini var; önce tahminleri silin.` })
+  }
+
+  const { error } = await supabase.from('players').delete().eq('id', id)
+  if (error) return json(500, { error: `Oyuncu silinemedi: ${error.message}` })
+  return json(200, { ok: true, deleted: id })
 }
 
 // --- #17 Profil fotoğrafları ---
@@ -344,6 +365,20 @@ async function route(request) {
     if (routeKey === 'POST /api/admin/login') return await login(request)
 
     if (!passwordOk(bearer(request))) return json(401, { error: 'Yetkisiz.' })
+
+    // #7: anon key ile bağlandıysa yazma uçları 503 döner (bootstrap OK).
+    const WRITE_ROUTES = new Set([
+      'PUT /api/admin/predictions',
+      'POST /api/admin/players',
+      'PATCH /api/admin/players',
+      'DELETE /api/admin/players/avatar',
+      'PUT /api/admin/players/avatar',
+      'POST /api/admin/sync',
+    ])
+    if (WRITE_ROUTES.has(routeKey) && isReadonly()) {
+      return json(503, { error: READONLY_MSG })
+    }
+
     const supabase = getSupabase()
 
     switch (routeKey) {
@@ -355,6 +390,8 @@ async function route(request) {
         return await createPlayer(supabase, request)
       case 'PATCH /api/admin/players':
         return await updatePlayer(supabase, request)
+      case 'DELETE /api/admin/players':
+        return await deletePlayer(supabase, request)
       case 'PUT /api/admin/players/avatar':
         return await uploadAvatar(supabase, request)
       case 'DELETE /api/admin/players/avatar':

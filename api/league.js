@@ -6,7 +6,7 @@
 // Not: Vercel web-standard imza için NAMED METHOD export ister (export function GET).
 
 import { createHash } from 'node:crypto'
-import { getSupabase } from '../lib/supabase.js'
+import { getSupabase, isReadonly } from '../lib/supabase.js'
 import { maybeSync } from '../lib/sync.js'
 import { buildLeaguePayload } from '../lib/league.js'
 import { LEAGUE_BY_CODE, activeLeague } from '../lib/targets.js'
@@ -54,9 +54,10 @@ export async function GET(request) {
     // supabase enjeksiyonu: demo sunucu bellek-içi istemcisini geçebilir
     // (request.supabase); üretimde (Vercel) env tabanlı istemci kurulur.
     const supabase = request.supabase ?? getSupabase()
-    // maybeSync aynen: senkron her zaman AKTİF ligi çeker (syncNow lig
-    // enjeksiyonu yapar); payload sorgusu istenen (lig, sezon)'a iner.
-    await maybeSync(supabase)
+    // #7: anon key ile bağlıysa senkron atla (yazma gerektirir) — sadece oku.
+    if (!request.supabase && !isReadonly()) {
+      await maybeSync(supabase)
+    }
     const payload = await buildLeaguePayload(supabase, {
       league: leagueParam || activeLeague(),
       seasonYear: seasonParam === '' ? undefined : Number(seasonParam),

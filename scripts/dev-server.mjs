@@ -19,6 +19,7 @@ const adminMethods = {
   POST: adminApi.POST,
   PUT: adminApi.PUT,
   PATCH: adminApi.PATCH,
+  DELETE: adminApi.DELETE,
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

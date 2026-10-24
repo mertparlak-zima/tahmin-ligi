@@ -86,6 +86,11 @@ npm run demo              # build + in-memory demo sunucu
 npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
 ```
 
+**Key'siz geliştirme (#7):** `SUPABASE_SERVICE_ROLE_KEY` olmadan
+`SUPABASE_ANON_KEY` ile `npm run dev:db` çalıştırabilirsin — salt-okunur
+(RLS korur; yazma uçları 503 döner). Demo verisi gerekmiyorsa
+`npm run dev:api` (in-memory) hiç key istemez.
+
 ### Testler
 
 ```bash
@@ -123,6 +128,7 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 | `PUT` | `/api/admin/predictions` | Tahmin kaydet/sil (batch, atomic) |
 | `POST` | `/api/admin/players` | Oyuncu ekle |
 | `PATCH` | `/api/admin/players` | Oyuncu güncelle (ad/renk/aktif) |
+| `DELETE` | `/api/admin/players` | Oyuncu sil (tahmini yoksa; #6 test temizliği) |
 | `POST` | `/api/admin/sync` | Manuel senkronizasyon |
 
 Yönetim uçları `Authorization: Bearer <ADMIN_PASSWORD>` başlığı ister.
