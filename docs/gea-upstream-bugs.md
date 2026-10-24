@@ -111,10 +111,12 @@ render ediyor — koşul thunk'ı `this.props.crest`'i kurulum anı dışında
 okuyunca undefined alıyor gibi. Aynı props zincirinden `name/short/size`
 (render anında text/attr olarak tüketilenler) doğru çalışıyor.
 
-Workaround (Crest bileşeni): koşulsuz katman tasarımı — img HER ZAMAN render
-edilir (şeffaf 1px GIF fallback src), opak zemin + z-index ile öndedir; logo
-yoksa/hata verirse arkadaki baş harf katmanı görünür. Prop'a bağlı JSX
-koşullarından tamamen kaçınılır.
+Workaround (Crest bileşeni, final): `<img>` elementi tamamen kaldırıldı.
+Logo URL'i render anında prop'tan okunup sınıf alanına yazılır;
+onAfterRender'da imperatif `background-image` olarak atanır. Reaktif binding,
+event yarışı, ertelenmiş patch yok — ezilecek hiçbir şey yok. (Ara
+denemelerde src binding'i — statik dahi — imperatif atamadan SONRA gelip
+şeffaf GIF ile ezdiği gözlemlendi.)
 
 ## Bildirim planı
 

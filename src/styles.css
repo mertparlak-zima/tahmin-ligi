@@ -609,14 +609,14 @@ a {
   border: 1px solid var(--line);
 }
 
-.crest-img {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.crest-logo {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  background: var(--surface-2);
+  background-color: var(--surface-2);
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
 }
 
 /* ---------- Turnuva rozeti ---------- */
