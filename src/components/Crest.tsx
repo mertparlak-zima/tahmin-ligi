@@ -1,19 +1,28 @@
-// Takım armutu: img yüklenemezse baş harf daireye düşer.
+// Takım armutu — koşulsuz katman tasarımı:
+// img HER ZAMAN render edilir (opak zemin + z-index ile öndedir); logo yoksa
+// veya yüklenemezse şeffaf 1px GIF'e düşer ve arkadaki baş harf görünür.
+// (Not: props.crest'e bağlı JSX koşulları Gea derleyicisinde ertelenmiş
+// değerlendirmede yanlış döndüğü için koşullu render'dan kaçınılır — bkv.
+// docs/gea-upstream-bugs.md madde 10.)
 
 import { Component } from '@geajs/core'
-import { cn } from '../utils/cn'
+
+const TRANSPARENT_1PX =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
 export default class Crest extends Component {
   declare props: { name: string; short: string; crest: string | null; size?: number }
 
-  failed = false
   imgEl: HTMLImageElement | null = null
 
   onAfterRender() {
     if (this.imgEl) {
-      this.imgEl.onload = () => (this.failed = false)
-      this.imgEl.onerror = () => (this.failed = true)
-      if (this.imgEl.complete && this.imgEl.naturalWidth === 0) this.failed = true
+      this.imgEl.onerror = () => {
+        this.imgEl.src = TRANSPARENT_1PX
+      }
+      if (this.imgEl.complete && this.imgEl.naturalWidth === 0 && !this.imgEl.src.endsWith('AQABAIAAAAAAAP')) {
+        this.imgEl.onerror(null)
+      }
     }
   }
 
@@ -23,11 +32,9 @@ export default class Crest extends Component {
       .slice(0, 3)
       .toLocaleUpperCase('tr-TR')
     return (
-      <span class={cn('crest', this.failed && 'crest-fallback')} style={{ width: `${size}px`, height: `${size}px` }}>
-        {!this.failed && crest ? (
-          <img ref={this.imgEl} class="crest-img" src={crest} alt={name} loading="lazy" />
-        ) : null}
+      <span class="crest" data-size={String(size)}>
         <span class="crest-initials">{initials}</span>
+        <img ref={this.imgEl} class="crest-img" src={crest || TRANSPARENT_1PX} alt={name} loading="lazy" />
       </span>
     )
   }

@@ -6,6 +6,16 @@ import { dateKey } from '../utils/format'
 
 const ADMIN_KEY = 'tahminligi.admin'
 
+function groupByDay(matches: any[]): Array<{ day: string; matches: any[] }> {
+  const byDay = new Map<string, any[]>()
+  for (const match of matches) {
+    const key = dateKey(match.kickoff)
+    if (!byDay.has(key)) byDay.set(key, [])
+    byDay.get(key).push(match)
+  }
+  return [...byDay.entries()].map(entry => ({ day: entry[0], matches: entry[1] }))
+}
+
 async function api(path: string, options: RequestInit = {}) {
   const password = sessionStorage.getItem(ADMIN_KEY) ?? ''
   const res = await fetch(path, {
@@ -31,7 +41,7 @@ class AdminStore extends Store {
 
   tab = 'predictions'
   editorPlayerId = ''
-  editorFilter: 'open' | 'all' = 'open'
+  showLocked = false
   drafts: Record<string, string> = {}
   baseline: Record<string, string> = {}
 
@@ -118,8 +128,8 @@ class AdminStore extends Store {
     this.resetDrafts()
   }
 
-  setEditorFilter(filter: 'open' | 'all') {
-    this.editorFilter = filter
+  toggleLocked() {
+    this.showLocked = !this.showLocked
   }
 
   setDraft(matchId: string, outcome: string) {
@@ -128,8 +138,7 @@ class AdminStore extends Store {
 
   get editorMatches(): any[] {
     const matches: any[] = this.data?.matches ?? []
-    const list = this.editorFilter === 'open' ? matches.filter(m => !m.locked) : matches
-    return [...list].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+    return matches.filter(m => !m.locked).sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
   }
 
   get players(): any[] {
@@ -137,18 +146,24 @@ class AdminStore extends Store {
   }
 
   get openMatchCount(): number {
-    return (this.data?.matches ?? []).filter(m => !m.locked).length
+    return this.editorMatches.length
   }
 
-  /** Editör maçları gün bazında. */
+  get lockedMatchCount(): number {
+    return (this.data?.matches ?? []).filter(m => m.locked).length
+  }
+
+  /** Tahmine açık maçlar, gün bazında (yakından uzağa). */
   get editorDays(): Array<{ day: string; matches: any[] }> {
-    const byDay = new Map<string, any[]>()
-    for (const match of this.editorMatches) {
-      const key = dateKey(match.kickoff)
-      if (!byDay.has(key)) byDay.set(key, [])
-      byDay.get(key).push(match)
-    }
-    return [...byDay.entries()].map(entry => ({ day: entry[0], matches: entry[1] }))
+    return groupByDay(this.editorMatches)
+  }
+
+  /** Kilitli (bitmiş/başlamış/ertelenmiş) maçlar, gün bazında (yeniden eskiye). */
+  get lockedDays(): Array<{ day: string; matches: any[] }> {
+    const locked = (this.data?.matches ?? [])
+      .filter(m => m.locked)
+      .sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
+    return groupByDay(locked)
   }
 
   get dirtyItems(): Array<{ matchId: string; outcome: string }> {

@@ -65,6 +65,11 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
    `identity.id` gibi ifadeler null'da patlar. Callback içinde yalnızca
    doğrudan STORE erişimi kullan (`uiStore.identityId`), hesaplamayı item
    component'in kendi prop'larına taşı (bkv. PredictionCard).
+10. **Prop'a bağlı JSX element-koşulları güvenilmez** (bkv. upstream madde 9):
+   koşul ertelenmiş değerlendirmede yanlış dönebilir. Bileşen içinde
+   `prop ? <el/> : <el2>` yerine koşulsuz katman tasarımı veya CSS
+   görünürlüğü kullan (bkv. Crest: img hep render + şeffaf GIF fallback +
+   z-index katmanı).
 
 ## Sözleşmeler
 

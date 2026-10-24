@@ -102,11 +102,23 @@ bekliyor. `entry[0]`/`entry[1]` veya nesne dizisi ile aşıldı.
 
 Anlaşılır hata mesajı veriyor (bu iyi); iç içe ternary `const` yeterli.
 
----
+## 9. Component prop'una bağlı JSX koşulları yanlış dal render ediyor (ertelenmiş değerlendirme)
+
+`template()` gövdesinde `this.props.crest` truthy olsa bile (aynı çalışmada
+log'la doğrulandı), prop'a bağlı element-koşullu (`? <img/> : <span/>` hem de
+`cond ? <el/> : null` split hali) ertelenmiş değerlendirmede FALSE dalını
+render ediyor — koşul thunk'ı `this.props.crest`'i kurulum anı dışında
+okuyunca undefined alıyor gibi. Aynı props zincirinden `name/short/size`
+(render anında text/attr olarak tüketilenler) doğru çalışıyor.
+
+Workaround (Crest bileşeni): koşulsuz katman tasarımı — img HER ZAMAN render
+edilir (şeffaf 1px GIF fallback src), opak zemin + z-index ile öndedir; logo
+yoksa/hata verirse arkadaki baş harf katmanı görünür. Prop'a bağlı JSX
+koşullarından tamamen kaçınılır.
 
 ## Bildirim planı
 
 Bu dosya hazırlanma nedeni: dashersw/gea reposuna issue açılmadan önce
 kayıt tutmak. Issue açma kararı ve zamanlaması kullanıcıya aittir; her madde
-tek başına minimal repro ile 10 satırda gösterilebilir. Madde 1 ve 2 en
+tek başına minimal repro ile 10 satırda gösterilebilir. Madde 1, 2 ve 9 en
 yüksek öncelik (sessiz failure üretiyorlar).

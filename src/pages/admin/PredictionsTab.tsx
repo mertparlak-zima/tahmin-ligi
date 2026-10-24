@@ -2,7 +2,6 @@ import { Component } from '@geajs/core'
 import adminStore from '../../stores/admin-store'
 import EditorDay from './EditorDay'
 import CompOption from '../../components/CompOption'
-import { cn } from '../../utils/cn'
 
 export default class PredictionsTab extends Component {
   template() {
@@ -26,29 +25,36 @@ export default class PredictionsTab extends Component {
               />
             ))}
           </select>
-          <div class="segmented">
-            <button class={cn('seg-item', adminStore.editorFilter === 'open' && 'active')} click={() => adminStore.setEditorFilter('open')}>
-              Tahmine açık ({openCount})
-            </button>
-            <button class={cn('seg-item', adminStore.editorFilter === 'all' && 'active')} click={() => adminStore.setEditorFilter('all')}>
-              Tüm maçlar
-            </button>
-          </div>
+          <button class="btn ghost sm" click={() => adminStore.toggleLocked()}>
+            {adminStore.showLocked
+              ? '🔒 Geçmiş maçları gizle'
+              : `🔒 Geçmiş maçları göster (${adminStore.lockedMatchCount})`}
+          </button>
         </div>
 
         <div class="admin-hint">
-          Tahminler maç başlama saatinde otomatik kilitlenir. Kilitli maçlar gri görünür ve değiştirilemez.
+          <b>{openCount} tahmine açık maç</b> — yalnızca bu maçlardaki seçimler kaydedilebilir.
+          Tahminler maç başlama saatinde otomatik kilitlenir; bitmiş maçlar değiştirilemez.
         </div>
 
-        {adminStore.players.length === 0 ? (
+        {players.length === 0 ? (
           <div class="empty">Önce Oyuncular sekmesinden oyuncu ekle.</div>
         ) : adminStore.editorDays.length === 0 ? (
           <div class="empty">Tahmine açık maç yok.</div>
         ) : (
-          adminStore.editorDays.map(g => (
-            <EditorDay key={g.day} day={g.day} matches={g.matches} />
+          adminStore.editorDays.map(dayGroup => (
+            <EditorDay key={dayGroup.day} day={dayGroup.day} matches={dayGroup.matches} />
           ))
         )}
+
+        {adminStore.showLocked && adminStore.lockedDays.length > 0 ? (
+          <div>
+            <div class="locked-section-title">Geçmiş · kilitli maçlar (değiştirilemez)</div>
+            {adminStore.lockedDays.map(dayGroup => (
+              <EditorDay key={dayGroup.day} day={dayGroup.day} matches={dayGroup.matches} locked />
+            ))}
+          </div>
+        ) : null}
 
         {adminStore.dirtyCount > 0 ? (
           <div class="save-bar">
