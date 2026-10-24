@@ -200,9 +200,22 @@ suite.test('maybeSync: veri tazeyse fetch çağrılmaz', async () => {
   }
 })
 
+suite.test('maybeSync: taze deneme (uçuştaki senkron) varken tekrar denemez — stampede koruması', async () => {
+  const supStampede = createMemorySupabase({
+    sync_state: [{ id: 1, last_attempt_at: iso(Date.now() - 5 * 1000), last_success_at: iso(Date.now() - 2 * hour), last_error: null, matches_seen: 0, updated_at: iso(T0) }],
+  })
+  const stub = withStubbedFetch([[CHAMPIONS, { events: [evFinished()] }]])
+  try {
+    await maybeSync(supStampede, 90)
+    assert.equal(stub.calls.length, 0, 'deneme penceresi içinde → yeni senkron yok')
+  } finally {
+    stub.restore()
+  }
+})
+
 suite.test('maybeSync: veri bayatsa senkron çalışır; hata yutulur', async () => {
   const stale = {
-    sync_state: [{ id: 1, last_attempt_at: iso(T0), last_success_at: iso(Date.now() - 2 * hour), last_error: null, matches_seen: 0, updated_at: iso(T0) }],
+    sync_state: [{ id: 1, last_attempt_at: iso(Date.now() - 2 * hour), last_success_at: iso(Date.now() - 2 * hour), last_error: null, matches_seen: 0, updated_at: iso(T0) }],
   }
   const supOk = createMemorySupabase(stale)
   const stub = withStubbedFetch([[CHAMPIONS, { events: [evFinished(), evLive("55'")] }]])
