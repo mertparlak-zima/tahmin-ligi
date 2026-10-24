@@ -7,7 +7,7 @@ export default function StandingsRow({ row, isOwn }: { row: any; isOwn: boolean 
       <td class={cn('col-rank', row.rank <= 3 && 'top')}>{row.rank}</td>
       <td class="col-player">
         <span class="cell-player">
-          <Avatar color={row.color} initials={row.initials} size="sm" />
+          <Avatar color={row.color} initials={row.initials} size="sm" photo={row.avatarUrl ?? null} />
           <span>{row.name}</span>
           {isOwn ? <span class="you-tag">SEN</span> : null}
         </span>

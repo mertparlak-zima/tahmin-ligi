@@ -77,7 +77,7 @@ export default class MyPredictionsPage extends Component {
     return (
       <div class="mypage">
         <div class="identity-hero">
-          <Avatar color={identity.color} initials={identity.initials} size="xl" />
+          <Avatar color={identity.color} initials={identity.initials} size="xl" photo={identity.avatarUrl ?? null} />
           <div class="identity-hero-text">
             <span class="identity-name">{identity.name}</span>
             <span class="identity-sub">

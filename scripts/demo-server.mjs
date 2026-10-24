@@ -181,7 +181,27 @@ function createMemorySupabase() {
       { id: 1, last_attempt_at: null, last_success_at: null, last_error: null, matches_seen: 0, updated_at: null },
     ],
   }
-  return { from: table => new Query(store, table) }
+  // Storage stub (#17): avatar uçları bellek-içi demo'da da gerçek yoldan geçsin.
+  store.storage = {}
+  const storageApi = bucket => ({
+    async upload(path, bytes) {
+      store.storage[bucket] ??= {}
+      if (store.storage[bucket][path] !== undefined) {
+        throw new Error('demo-storage: aynı path zaten var: ' + path)
+      }
+      store.storage[bucket][path] = bytes
+      return { data: { path }, error: null }
+    },
+    async remove(paths) {
+      store.storage[bucket] ??= {}
+      for (const p of paths ?? []) delete store.storage[bucket][p]
+      return { data: [], error: null }
+    },
+    getPublicUrl(path) {
+      return { data: { publicUrl: `http://memory.local/storage/${bucket}/${path}` } }
+    },
+  })
+  return { from: table => new Query(store, table), storage: { from: storageApi } }
 }
 
 // ----------------------------------------------------------------------
@@ -281,6 +301,11 @@ async function handleApi(request) {
       return admin.updatePlayer(supabase, webReq)
     case 'PUT /api/admin/scoring':
       return admin.saveScoring(supabase, webReq)
+    case 'PUT /api/admin/players/avatar':
+      return admin.uploadAvatar(supabase, webReq)
+    case 'DELETE /api/admin/players/avatar':
+      // deleteAvatar gövde VEYA query playerId kabul eder (demo webReq'te ikisi de var).
+      return admin.deleteAvatar(supabase, webReq)
     case 'POST /api/admin/sync': {
       // Senkronizasyonları tek sıraya diz; çakışma olmasın.
       syncing = (syncing ?? Promise.resolve()).then(() => admin.sync(supabase))

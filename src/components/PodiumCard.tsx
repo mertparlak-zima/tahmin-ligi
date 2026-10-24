@@ -12,7 +12,7 @@ export default function PodiumCard({ row }: { row: any }) {
           </svg>
         </span>
       ) : null}
-      <Avatar color={row.color} initials={row.initials} size="lg" />
+      <Avatar color={row.color} initials={row.initials} size="lg" photo={row.avatarUrl ?? null} />
       <span class="podium-rank">{row.rank}. sıra</span>
       <span class="podium-name">{row.name}</span>
       <span class="podium-points">{row.points} P</span>

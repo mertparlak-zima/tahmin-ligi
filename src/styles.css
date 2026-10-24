@@ -1591,6 +1591,117 @@ a {
   font-size: 19px;
 }
 
+/* Foto katmanı (#17): her zaman durur; background-image yalnız URL varken
+   imperatif atanır (Crest deseni). Yoksa/bozuksa arkadaki baş harfler görünür. */
+.avatar {
+  position: relative;
+}
+
+.avatar .avatar-photo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* --- Avatar kırpma modalı (#17) --- */
+
+.avatar-crop-modal {
+  width: min(340px, 100%);
+}
+
+.avatar-file-input {
+  display: none;
+}
+
+.avatar-dropzone {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 34px 16px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.avatar-dropzone:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.avatar-dropzone-title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.avatar-dropzone-sub {
+  font-size: 11.5px;
+  color: var(--muted-2);
+  text-align: center;
+}
+
+.avatar-stage {
+  position: relative;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-deep);
+  touch-action: none;
+  cursor: grab;
+}
+
+.avatar-stage:active {
+  cursor: grabbing;
+}
+
+.avatar-stage-img {
+  position: absolute;
+  background-position: center;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  will-change: left, top, width, height;
+}
+
+.avatar-stage-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 0 0 9999px rgba(3, 10, 19, 0.0);
+  pointer-events: none;
+}
+
+.avatar-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.avatar-zoom-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted-2);
+}
+
+.avatar-zoom-range {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.player-row-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .you-tag {
   padding: 2px 7px;
   border-radius: 6px;

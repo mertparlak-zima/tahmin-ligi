@@ -337,6 +337,69 @@ if (await loginInput.count() > 0) {
   await page.waitForTimeout(500)
   check('oyuncular sekmesi', (await page.locator('.player-form').count()) === 1)
 
+  // Avatar akışı (#17) — yalnız bellek-içi storage stub'lı demo sunucuda.
+  if (process.env.BROWSER_CHECK_TEST_AVATAR) {
+    // 64x64 geçerli PNG'yi sayfa canvas'ında üret (dosya yazmadan).
+    const pngDataUrl = await page.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 200
+      c.height = 180
+      const ctx = c.getContext('2d')
+      ctx.fillStyle = '#b8f34a'
+      ctx.fillRect(0, 0, 200, 180)
+      ctx.fillStyle = '#0c1a04'
+      ctx.beginPath()
+      ctx.arc(100, 90, 60, 0, Math.PI * 2)
+      ctx.fill()
+      return c.toDataURL('image/png')
+    })
+    const pngBuffer = Buffer.from(pngDataUrl.split(',')[1], 'base64')
+    const firstPhotoBtn = page.locator('.player-row button', { hasText: 'Fotoğraf' }).first()
+    if (await firstPhotoBtn.count() > 0) {
+      await firstPhotoBtn.click()
+      await page.waitForTimeout(400)
+      check('avatar modalı açılır', (await page.locator('.avatar-crop-modal').count()) === 1)
+      await page.locator('.avatar-file-input').setInputFiles({
+        name: 'test-avatar.png',
+        mimeType: 'image/png',
+        buffer: pngBuffer,
+      })
+      await page.waitForTimeout(600)
+      check('kırpma sahnesi görünür', (await page.locator('.avatar-stage').count()) === 1)
+      await page.locator('.avatar-crop-modal .btn', { hasText: 'Kırp ve kaydet' }).click()
+      let avatarSaved = false
+      try {
+        await page.waitForSelector('.toast', { timeout: 8000 })
+        avatarSaved = true
+      } catch {
+        avatarSaved = false
+      }
+      check('avatar kaydedilir', avatarSaved)
+      if (avatarSaved) {
+        await page.waitForTimeout(800)
+        const hasChangeBtn = await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()
+        check('oyuncu satırı foto gösterir', hasChangeBtn > 0)
+        const removeBtn = page.locator('.player-row button', { hasText: 'Kaldır' }).first()
+        if (await removeBtn.count() > 0) {
+          await removeBtn.click()
+          let removed = false
+          try {
+            // Kaydet toast'ı hâlâ görünür olabileceğinden metinle bekle.
+            await page.waitForSelector('.toast', { hasText: 'kaldırıldı', timeout: 8000 })
+            removed = true
+          } catch {
+            removed = false
+          }
+          check('avatar kaldırılır', removed && (await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()) === 0)
+        }
+      }
+    } else {
+      check('avatar modalı açılır', false, 'Fotoğraf düğmesi yok')
+    }
+  } else {
+    console.log('  bilgi: avatar akışı atlandı (BROWSER_CHECK_TEST_AVATAR yok — gerçek DB bucket ister)')
+  }
+
   // puanlama sekmesi
   await page.locator('.admin-tab', { hasText: 'Puanlama' }).click()
   await page.waitForTimeout(500)

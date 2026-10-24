@@ -33,7 +33,9 @@ const row = o => ({
 })
 
 const mainPlayers = [
-  { id: 'p1', name: 'Ogün', color: '#b8f34a', is_active: true },
+  // p1'e avatar tohumu (#17): payload'da avatarUrl taşınımını ölçer; diğerleri
+  // kolonsuz → `?? null` yolunu (deploy sırası güvenliği) test eder.
+  { id: 'p1', name: 'Ogün', color: '#b8f34a', is_active: true, avatar_url: 'https://x.supabase.co/storage/v1/object/public/avatars/av-p1-1.jpg' },
   { id: 'p2', name: 'Mert', color: '#5ce1e6', is_active: true },
   { id: 'p3', name: 'Eski', color: '#ff9f68', is_active: false },
   { id: 'p4', name: 'Ali', color: '#ffd05c', is_active: true },
@@ -130,7 +132,7 @@ suite.test('mühür: gelecek TIMED maçta tahmin yalnız "kim" olarak görünür
   assert.equal(sealed.color, '#b8f34a')
   assert.deepEqual(
     Object.keys(sealed).sort(),
-    ['color', 'initials', 'name', 'playerId'],
+    ['avatarUrl', 'color', 'initials', 'name', 'playerId'],
     'mühürlü satırda outcome/label/points/correct OLMAMALI',
   )
   assert.equal(m4.score, null)
@@ -189,6 +191,27 @@ suite.test('pasif oyuncu her yerden dışlanır', () => {
   const m1 = payload.matches.find(m => m.id === 'm1')
   assert.ok(!m1.predictions.some(p => p.playerId === 'p3'), 'maç tahminlerinde pasif yok')
   assert.equal(m1.predictionCount, 3, 'pasif tahmini sayıya girmez')
+})
+
+suite.test('avatarUrl: players/standings/tahmin satırlarında taşınır (null dahil)', () => {
+  const avatar1 = mainPlayers[0].avatar_url
+  const playersById = Object.fromEntries(payload.players.map(p => [p.id, p]))
+  assert.equal(playersById.p1.avatarUrl, avatar1, 'players[] avatar URL taşıyor')
+  assert.equal(playersById.p2.avatarUrl, null, 'avataru olmayan → null (kolon yoksa patlamaz)')
+
+  const st = Object.fromEntries(payload.standings.map(r => [r.id, r]))
+  assert.equal(st.p1.avatarUrl, avatar1, 'standings satırı avatar URL taşıyor')
+  assert.equal(st.p2.avatarUrl, null)
+
+  const m1 = payload.matches.find(m => m.id === 'm1')
+  const ogun = m1.predictions.find(p => p.playerId === 'p1')
+  assert.equal(ogun.avatarUrl, avatar1, 'maç tahmin satırı avatar URL taşıyor')
+  const mert = m1.predictions.find(p => p.playerId === 'p2')
+  assert.equal(mert.avatarUrl, null)
+
+  // mühürlü gelecek maçta da kim satırı avatarUrl ile gelir
+  const m4 = payload.matches.find(m => m.id === 'm4')
+  assert.equal(m4.predictions[0].avatarUrl, avatar1)
 })
 
 suite.test('puan durumu matematik: points/played/correctOutcomes/accuracy', () => {

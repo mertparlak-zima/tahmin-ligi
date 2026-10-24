@@ -7,6 +7,9 @@ create table if not exists players (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
   color        text not null default '#b8f34a',
+  -- #17 profil fotoğrafı: Supabase Storage public URL'i (nullable, varsayılan yok).
+  -- Mevcut kurulumlarda migrations/ SQL'i ile eklenir.
+  avatar_url   text,
   is_active    boolean not null default true,
   bonus_points int not null default 0,
   created_at   timestamptz not null default now()

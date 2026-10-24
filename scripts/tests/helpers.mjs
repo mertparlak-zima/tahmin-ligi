@@ -1,7 +1,8 @@
 // Paylaşımlı offline test yardımcıları: mini koşucu, in-memory supabase
 // adaptörü (demo-server.mjs'teki Query'den uyarlandı; supabase-js
 // davranışına daha sadık: single() boş sonuçta PGRST116 döndürür,
-// players.lower(name) benzersizlik ihlali 23505 döndürür), fetch stub,
+// players.lower(name) benzersizlik ihlali 23505 döndürür; ayrıca Storage
+// stub'ı — from(bucket).upload/remove/getPublicUrl), fetch stub,
 // ESPN event fikstür üreticisi.
 //
 // Kullanım: node scripts/tests/server.test.mjs
@@ -264,6 +265,9 @@ export function createMemorySupabase(seed = {}, opts = {}) {
     sync_state: clone(seed.sync_state ?? [
       { id: 1, last_attempt_at: null, last_success_at: null, last_error: null, matches_seen: 0, updated_at: null },
     ]),
+    // Storage stub dosya deposu: storage[bucket][path] = bytes.
+    // Testler sup.store.storage.avatars üzerinden doğrudan inceleyebilir.
+    storage: clone(seed.storage ?? {}),
   }
 
   const enforceNameUnique = opts.enforcePlayerNameUnique !== false
@@ -280,7 +284,35 @@ export function createMemorySupabase(seed = {}, opts = {}) {
     },
   }
 
-  return { store, from: table => new Query(store, table, hooks) }
+  // supabase-js Storage alt kümesi (avatar uçları için): from(bucket) →
+  // upload(path, bytes, opts) / remove(paths) / getPublicUrl(path).
+  // upload var olan path'e hata döndürür (upsert yok), getPublicUrl senkrondur.
+  const storage = {
+    from(bucketName) {
+      const files = () => store.storage[bucketName] ?? (store.storage[bucketName] = {})
+      return {
+        upload: async (path, bytes) => {
+          const bucket = files()
+          if (Object.prototype.hasOwnProperty.call(bucket, path)) {
+            return { data: { path }, error: { message: 'The resource already exists' } }
+          }
+          bucket[path] = bytes
+          return { data: { path }, error: null }
+        },
+        remove: async paths => {
+          const bucket = files()
+          const list = Array.isArray(paths) ? paths : [paths]
+          for (const p of list) delete bucket[p]
+          return { data: list, error: null }
+        },
+        getPublicUrl: path => ({
+          data: { publicUrl: `http://memory.local/storage/${bucketName}/${path}` },
+        }),
+      }
+    },
+  }
+
+  return { store, storage, from: table => new Query(store, table, hooks) }
 }
 
 // --- global.fetch stub (offline, deterministik) ---

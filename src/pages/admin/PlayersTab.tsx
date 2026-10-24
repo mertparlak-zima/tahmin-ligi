@@ -1,6 +1,7 @@
 import { Component } from '@geajs/core'
 import adminStore from '../../stores/admin-store'
 import PlayerRow from './PlayerRow'
+import AvatarCropModal from './AvatarCropModal'
 
 export default class PlayersTab extends Component {
   newName = ''
@@ -44,6 +45,8 @@ export default class PlayersTab extends Component {
           {players.map(p => <PlayerRow key={p.id} player={p} />)}
           {players.length === 0 ? <div class="empty">Henüz oyuncu yok.</div> : null}
         </div>
+
+        <AvatarCropModal />
       </div>
     )
   }

@@ -165,6 +165,159 @@ export async function updatePlayer(supabase, request) {
   return json(200, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
 }
 
+// --- #17 Profil fotoğrafları ---
+// akış: istemci görseli 256x256 JPEG'e (veya PNG/WebP) yeniden kodlayıp
+// data URL olarak gönderir; sunucu içerik doğrulaması yapıp Supabase
+// Storage 'avatars' bucket'ına yazar ve players.avatar_url'u günceller.
+
+const AVATAR_BUCKET = 'avatars'
+const AVATAR_MAX_BYTES = 512 * 1024
+// Beyan edilebilecek MIME'ler + magic-byte türünden dosya uzantısı.
+const AVATAR_TYPES = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+
+/** data URL'i ayrıştırır: `data:image/jpeg;base64,...` → { mime, bytes }.
+ * Biçim uygun değilse null döner (base64 gövdesi boşsa da bytes boş gelir;
+ * magic-byte kontrolü zaten reddeder). */
+function parseAvatarDataUrl(raw) {
+  if (typeof raw !== 'string' || !raw.startsWith('data:image/')) return null
+  const comma = raw.indexOf(',')
+  if (comma === -1) return null
+  // meta: 'image/<tür>;base64' — yalnız base64 kodlama desteklenir.
+  const meta = raw.slice(5, comma)
+  const semicolon = meta.lastIndexOf(';base64')
+  if (semicolon === -1) return null
+  const mime = meta.slice(0, semicolon)
+  const bytes = Buffer.from(raw.slice(comma + 1), 'base64')
+  return { mime, bytes }
+}
+
+/** Magic-byte koklama: içeriğin GERÇEK türünü döndürür (beyan değil).
+ * JPEG FF D8 FF · PNG 89 50 4E 47 · WebP 52 49 46 46 (RIFF). */
+function sniffImageType(bytes) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png'
+  if (bytes.length >= 4 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'image/webp'
+  return null
+}
+
+/** Public avatar URL'inden storage path'ini çıkarır; yalnız bu oyuncuya ait
+ * `av-<playerId>-` önekli dosya döner (başka path asla silinemez). */
+function avatarPathOf(url, playerId) {
+  if (typeof url !== 'string') return null
+  const marker = `/${AVATAR_BUCKET}/`
+  const idx = url.indexOf(marker)
+  if (idx === -1) return null
+  const path = url.slice(idx + marker.length)
+  return path.startsWith(`av-${playerId}-`) ? path : null
+}
+
+/** Storage dosyasını sessizce siler: temizlik hatası ana işlemi bozmaz. */
+async function removeStorageQuietly(supabase, path) {
+  try {
+    const { error } = await supabase.storage.from(AVATAR_BUCKET).remove([path])
+    if (error) console.error(`Avatar silinemedi (${path}):`, error.message)
+  } catch (err) {
+    console.error(`Avatar silinemedi (${path}):`, err.message)
+  }
+}
+
+export async function uploadAvatar(supabase, request) {
+  const body = await request.json().catch(() => ({}))
+  const { playerId } = body
+
+  // a) playerId + dataUrl biçimi
+  if (!playerId || typeof body.dataUrl !== 'string' || !body.dataUrl.startsWith('data:image/')) {
+    return json(400, { error: 'playerId ve dataUrl (data:image/...;base64,...) gerekli.' })
+  }
+  const parsed = parseAvatarDataUrl(body.dataUrl)
+  if (!parsed) return json(400, { error: 'dataUrl biçimi geçersiz: data:image/<tür>;base64,<veri> olmalı.' })
+
+  // b) beyan edilen MIME beyaz listede mi
+  if (!AVATAR_TYPES[parsed.mime]) {
+    return json(400, { error: 'Görsel türü JPEG, PNG veya WebP olmalı.' })
+  }
+
+  // c) çözülen gövde ≤ 512 KB
+  if (parsed.bytes.length > AVATAR_MAX_BYTES) {
+    return json(400, { error: 'Görsel en fazla 512 KB olabilir.' })
+  }
+
+  // d) magic-byte: belirleyici olan İÇERİK; beyanla uyuşmak zorunda değil,
+  //    whitelist'te bir türe denk geliyorsa kabul edilir.
+  const sniffed = sniffImageType(parsed.bytes)
+  if (!sniffed) {
+    return json(400, { error: 'Dosya içeriği geçerli bir görsel değil (JPEG, PNG, WebP).' })
+  }
+
+  // e) oyuncu var mı (eski avatar_url temizliği için de gerekiyor)
+  const { data: player } = await supabase
+    .from('players')
+    .select('id, name, avatar_url')
+    .eq('id', playerId)
+    .maybeSingle()
+  if (!player) return json(404, { error: 'Oyuncu bulunamadı.' })
+
+  // f) yükleme — versiyonlu ad: cache-busting + upsert gerekmez
+  const path = `av-${playerId}-${Date.now()}.${AVATAR_TYPES[sniffed]}`
+  const { error: uploadError } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, parsed.bytes, { contentType: sniffed, upsert: false })
+  if (uploadError) return json(500, { error: `Avatar yüklenemedi: ${uploadError.message}` })
+
+  const avatarUrl = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl
+
+  // g) DB güncelleme; update başarısızsa yeni dosya yetim kalmasın
+  const { data: updated, error: updateError } = await supabase
+    .from('players')
+    .update({ avatar_url: avatarUrl })
+    .eq('id', playerId)
+    .select('id, name, color, is_active, avatar_url')
+    .maybeSingle()
+  if (updateError || !updated) {
+    await removeStorageQuietly(supabase, path)
+    if (updateError) return json(500, { error: `Avatar kaydedilemedi: ${updateError.message}` })
+    return json(404, { error: 'Oyuncu bulunamadı.' })
+  }
+
+  // başarılı yüklemeden SONRA eski dosyayı temizle (hata yüklemeyi bozmaz)
+  const oldPath = avatarPathOf(player.avatar_url, playerId)
+  if (oldPath) await removeStorageQuietly(supabase, oldPath)
+
+  // h) yanıt
+  return json(200, { ok: true, avatarUrl, player: { ...updated, initials: initialsOf(updated.name) } })
+}
+
+export async function deleteAvatar(supabase, request) {
+  const body = await request.json().catch(() => ({}))
+  const playerId = body.playerId ?? new URL(request.url).searchParams.get('playerId')
+  if (!playerId) return json(400, { error: 'playerId gerekli.' })
+
+  const { data: player } = await supabase
+    .from('players')
+    .select('id, name, avatar_url')
+    .eq('id', playerId)
+    .maybeSingle()
+  if (!player) return json(404, { error: 'Oyuncu bulunamadı.' })
+
+  // storage'dan mevcut dosyayı sil (hatası yutulur), sonra kolonu boşalt
+  const path = avatarPathOf(player.avatar_url, playerId)
+  if (path) await removeStorageQuietly(supabase, path)
+
+  const { data: updated, error } = await supabase
+    .from('players')
+    .update({ avatar_url: null })
+    .eq('id', playerId)
+    .select('id, name, color, is_active, avatar_url')
+    .maybeSingle()
+  if (error) return json(500, { error: `Avatar silinemedi: ${error.message}` })
+  if (!updated) return json(404, { error: 'Oyuncu bulunamadı.' })
+  return json(200, { ok: true, player: { ...updated, initials: initialsOf(updated.name) } })
+}
+
 export async function saveScoring(supabase, request) {
   const body = await request.json().catch(() => ({}))
   const { data: current } = await supabase
@@ -233,6 +386,10 @@ async function route(request) {
         return await createPlayer(supabase, request)
       case 'PATCH /api/admin/players':
         return await updatePlayer(supabase, request)
+      case 'PUT /api/admin/players/avatar':
+        return await uploadAvatar(supabase, request)
+      case 'DELETE /api/admin/players/avatar':
+        return await deleteAvatar(supabase, request)
       case 'PUT /api/admin/scoring':
         return await saveScoring(supabase, request)
       case 'POST /api/admin/sync':
@@ -259,5 +416,9 @@ export async function PUT(request) {
 }
 
 export async function PATCH(request) {
+  return route(request)
+}
+
+export async function DELETE(request) {
   return route(request)
 }
