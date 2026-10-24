@@ -1,7 +1,7 @@
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
-import DateStrip from '../components/DateStrip'
+import MonthCalendar from '../components/MonthCalendar'
 import FilterBar from '../components/FilterBar'
 import CompGroup from '../components/CompGroup'
 import SkeletonCard from '../components/SkeletonCard'
@@ -31,7 +31,7 @@ export default class MatchesPage extends Component {
 
     return (
       <div class="matches-page">
-        <DateStrip />
+        <MonthCalendar />
         <FilterBar />
 
         {anyMatches ? (

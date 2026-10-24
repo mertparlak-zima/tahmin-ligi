@@ -44,57 +44,101 @@ if (process.env.BROWSER_CHECK_TEST_STALE) {
   check('bayatlık bandı yanlış alarm yok', bandOpen === 0)
 }
 
-const dateChips = await page.locator('.date-chip').count()
-check('tarih şeridi dolu', dateChips > 0, `${dateChips} chip`)
+// --- 1b) Ay takvimi (#19) ---
+const calRoot = await page.locator('.cal-root').count()
+check('ay takvimi render', calRoot === 1)
+const calCells = await page.locator('.cal-cell').count()
+check('takvim 6x7 hücre', calCells === 42, `${calCells} hücre`)
+const todayCells = await page.locator('.cal-cell.today').count()
+check('bugün hücresi vurgulu', todayCells === 1)
+const calChips = await page.locator('.cal-chip').count()
+check('fikstür chipleri render', calChips > 0, `${calChips} chip`)
 
 // Maçlı bir gün seç (bugün maç olmayabilir)
-const chipWithMatches = page.locator('.date-chip').filter({ has: page.locator('.date-count, .date-live-dot') }).first()
-if (await chipWithMatches.count() > 0) await chipWithMatches.click()
+const dayWithMatches = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
+if (await dayWithMatches.count() > 0) await dayWithMatches.click()
 await page.waitForTimeout(500)
 
 const matchRows = await page.locator('.match-row').count()
 check('maç kartları render', matchRows > 0, `${matchRows} kart`)
 
 if (process.env.BROWSER_CHECK_TEST_STALE) {
-  // Fake-stale modunda canlıya zorlanan maçın gününü seç (canlı noktalı chip).
-  const liveChip = page.locator('.date-chip').filter({ has: page.locator('.date-live-dot') }).first()
-  if (await liveChip.count() > 0) {
-    await liveChip.click()
+  // Fake-stale modunda canlıya zorlanan maçın günü seç (canlı noktalı hücre).
+  const liveCell = page.locator('.cal-cell').filter({ has: page.locator('.cal-live-dot') }).first()
+  if (await liveCell.count() > 0) {
+    await liveCell.click()
     await page.waitForTimeout(400)
   }
   const sonLabel = await page.locator('.slot.stale', { hasText: 'SON BİLGİ' }).count()
   check('canlı satır SON BİLGİ etiketi', sonLabel >= 1, `${sonLabel} satır`)
+  const sonChip = await page.locator('.cal-chip.stale').count()
+  check('takvim çipinde SON etiketi', sonChip >= 1, `${sonChip} chip`)
 }
 
-// --- 2) Tarih chip'ine tıklama (dinamik class değişimi) ---
-const firstChip = page.locator('.date-chip').first()
-await firstChip.click()
-await page.waitForTimeout(300)
-const selectedCount = await page.locator('.date-chip.selected').count()
-check('tarih seçimi aktif sınıf alır', selectedCount === 1)
+// --- 2) Gün seçimi + ay gezinme (dinamik class değişimi) ---
+const selectedCount = await page.locator('.cal-cell.selected').count()
+check('gün seçimi aktif sınıf alır', selectedCount === 1)
 
-// --- 2b) Tarih chip hover önizlemesi (yalnız gerçek hover cihazlarında) ---
+const titleBefore = await page.locator('.cal-title').textContent()
+await page.locator('.cal-nav[aria-label="Önceki ay"]').click()
+await page.waitForTimeout(350)
+const titleAfter = await page.locator('.cal-title').textContent()
+check('ay geri gezinme', titleBefore !== titleAfter, `${titleBefore} → ${titleAfter}`)
+check('gezinme sonrası 42 hücre', (await page.locator('.cal-cell').count()) === 42)
+const todayBtnCount = await page.locator('.cal-today-btn').count()
+if (todayBtnCount > 0) {
+  await page.locator('.cal-today-btn').click()
+  await page.waitForTimeout(350)
+  check('Bugün düğmesi geri döner', (await page.locator('.cal-cell.today').count()) === 1)
+} else {
+  check('Bugün düğmesi geri döner', true, 'zaten bugün ayındayız')
+}
+
+// Sezon sınırı aşan ay gezinme (yalnız fake-arşivli demo sunucuda anlamlı).
+if (process.env.BROWSER_CHECK_TEST_ARCHIVE) {
+  let found = false
+  let visited = ''
+  for (let i = 0; i < 14; i++) {
+    await page.locator('.cal-nav[aria-label="Önceki ay"]').click()
+    await page.waitForTimeout(300)
+    visited = await page.locator('.cal-title').textContent()
+    if ((await page.locator('.cal-cell.in-month .cal-chip').count()) > 0) { found = true; break }
+  }
+  check('geçmiş sezon ayında fikstür chipleri', found, visited)
+  if (found) {
+    await page.locator('.cal-cell.in-month').filter({ has: page.locator('.cal-chip') }).first().click()
+    await page.waitForTimeout(900)
+    check('geçmiş sezon günü maç listesi', (await page.locator('.match-row').count()) > 0)
+  }
+  const backBtn = page.locator('.cal-today-btn')
+  if (await backBtn.count() > 0) {
+    await backBtn.click()
+    await page.waitForTimeout(300)
+  }
+}
+
+// --- 2b) Takvim hücresi hover önizlemesi (yalnız gerçek hover cihazlarında) ---
 const hoverCapable = await page.evaluate(() => window.matchMedia('(hover: hover) and (pointer: fine)').matches)
 if (hoverCapable) {
-  const chipWithMatches2 = page.locator('.date-chip').filter({ has: page.locator('.date-count, .date-live-dot') }).first()
-  if (await chipWithMatches2.count() > 0) {
-    // İşaretçi zaten chip üzerinde olabilir (önceki tıklamalar) — mouseover
+  const cellWithMatches = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
+  if (await cellWithMatches.count() > 0) {
+    // İşaretçi zaten hücre üzerinde olabilir (önceki tıklamalar) — mouseover
     // tetiklenmesi için önce kesin boş bir noktaya çek.
-    await page.mouse.move(8, 600)
+    await page.mouse.move(8, 700)
     await page.waitForTimeout(120)
-    await chipWithMatches2.hover()
+    await cellWithMatches.hover()
     await page.waitForTimeout(350)
     const popoverOpen = await page.locator('.date-preview-popover.open').count()
-    check('tarih chip önizlemesi açılır', popoverOpen === 1)
+    check('takvim hücre önizlemesi açılır', popoverOpen === 1)
     if (popoverOpen === 1) {
       const previewRows = await page.locator('.date-preview-row').count()
       check('önizlemede maç satırı var', previewRows > 0, `${previewRows} satır`)
     }
-    await page.mouse.move(8, 600)
+    await page.mouse.move(8, 700)
     await page.waitForTimeout(350)
     check('önizleme pointer çekilince kapanır', (await page.locator('.date-preview-popover.open').count()) === 0)
   } else {
-    console.log('  bilgi: maçlı chip yok → önizleme testi atlandı')
+    console.log('  bilgi: maçlı hücre yok → önizleme testi atlandı')
   }
 } else {
   console.log('  bilgi: hover desteklenmiyor → önizleme testi atlandı')
@@ -105,6 +149,13 @@ const adminLinkCount = await page.locator('.topbar-actions .admin-link').count()
 check('topbar yönetim düğmesi', adminLinkCount === 1)
 
 // --- 3) Filtre segmenti (bilgi amaçlı; hata vermemeli) ---
+// Ay/sezon turlarından sonra seçili gün bugün olabilir; sheet testinin maç
+// bulması için maçlı bir güne geri dön.
+const dayWithChipAgain = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
+if (await dayWithChipAgain.count() > 0) {
+  await dayWithChipAgain.click()
+  await page.waitForTimeout(400)
+}
 await page.locator('.seg-item', { hasText: 'Bitti' }).first().click()
 await page.waitForTimeout(300)
 const finishedRows = await page.locator('.match-row').count()

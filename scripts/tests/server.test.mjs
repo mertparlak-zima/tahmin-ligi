@@ -9,9 +9,10 @@ import { suite as targetsSuite } from './targets.test.mjs'
 import { suite as leagueSuite } from './league.test.mjs'
 import { suite as adminSuite } from './admin.test.mjs'
 import { suite as syncSuite } from './sync.test.mjs'
+import { suite as calendarSuite } from './calendar.test.mjs'
 
 const results = []
-for (const suite of [espnSuite, targetsSuite, leagueSuite, adminSuite, syncSuite]) {
+for (const suite of [espnSuite, targetsSuite, leagueSuite, adminSuite, syncSuite, calendarSuite]) {
   results.push(await suite.run())
 }
 

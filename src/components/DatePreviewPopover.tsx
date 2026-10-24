@@ -24,7 +24,7 @@ export default class DatePreviewPopover extends Component {
         class={`date-preview-popover${open ? ' open' : ''}${below ? ' below' : ''}`}
         aria-hidden="true"
       >
-        {(leagueStore.matchesByDay[uiStore.datePreviewKey] ?? []).map(match => (
+        {(leagueStore.calendarMatchesByDay[uiStore.datePreviewKey] ?? []).map(match => (
           <DatePreview key={match.id} match={match} />
         ))}
       </div>

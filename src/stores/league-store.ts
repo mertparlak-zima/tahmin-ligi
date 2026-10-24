@@ -1,7 +1,15 @@
-// Lig verisi: yükleme, adaptif polling, görünüm filtreleri.
+// Lig verisi: yükleme, adaptif polling, görünüm filtreleri, ay takvimi (#19).
 
 import { Store } from '@geajs/core'
 import { dateKey, todayKey } from '../utils/format'
+import {
+  monthMatrix,
+  parseMonthKey,
+  seasonOfYearMonth,
+  shiftMonth,
+  summarizeDay,
+  todayMonthKey,
+} from '../utils/calendar.js'
 
 export type StatusFilter = 'all' | 'live' | 'upcoming' | 'finished'
 
@@ -17,6 +25,12 @@ class LeagueStore extends Store {
   archiveLoading = false
   archiveError: string | null = null
   private archiveCache: Record<number, any> = {}
+  /** Ay takvimi (#19): '' = bugünün ayı. */
+  selectedMonthKey = ''
+  calendarLoading = false
+  calendarError: string | null = null
+  /** Ay takviminin sezon payload önbelleği (sezon başına tek fetch). */
+  private monthSeasonCache: Record<number, any> = {}
 
   selectedDate = ''
   statusFilter: StatusFilter = 'all'
@@ -97,6 +111,97 @@ class LeagueStore extends Store {
     }
   }
 
+  // --- Ay takvimi (#19) ---
+
+  get calendarMonthKey(): string {
+    return this.selectedMonthKey || todayMonthKey()
+  }
+
+  get isCurrentMonth(): boolean {
+    return this.calendarMonthKey === todayMonthKey()
+  }
+
+  /** Ay gezinme: sınırsız geri/ileri; sezon sınırı aşılırsa o sezonun payload'ı çekilir. */
+  selectMonth(delta: number) {
+    this.selectedMonthKey = shiftMonth(this.calendarMonthKey, delta)
+    this.ensureMonthData()
+  }
+
+  goToTodayMonth() {
+    this.selectedMonthKey = todayMonthKey()
+    this.selectedDate = todayKey()
+    this.ensureMonthData()
+  }
+
+  /** Gün seçimi: maç listesi o günü; gün başka aydan ise takvim o aya geçer. */
+  selectDay(dayKey: string) {
+    this.selectedDate = dayKey
+    this.selectedMonthKey = dayKey.slice(0, 7)
+    this.ensureMonthData()
+  }
+
+  /** Seçili ayın sezonu aktif sezon değilse (ve veri yoksa) ?season= ile çek. */
+  private ensureMonthData() {
+    const parsed = parseMonthKey(this.calendarMonthKey)
+    if (!parsed) return
+    const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
+    const activeSeason = this.data?.meta?.season?.year
+    if (activeSeason == null || season === activeSeason) return
+    if (this.monthSeasonCache[season]) return
+    this.calendarLoading = true
+    this.calendarError = null
+    fetch(`/api/league?season=${season}`, { cache: 'no-store' })
+      .then(async res => {
+        if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
+        this.monthSeasonCache[season] = await res.json()
+      })
+      .catch((err: any) => {
+        this.calendarError = err?.message ?? 'Sezon verisi alınamadı.'
+      })
+      .finally(() => {
+        this.calendarLoading = false
+      })
+  }
+
+  /** Ayın veri kaynağı: aktif sezon payload'ı ya da çekilmiş sezon payload'ı. */
+  get calendarSource(): any {
+    const parsed = parseMonthKey(this.calendarMonthKey)
+    if (!parsed) return this.data
+    const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
+    if (season === this.data?.meta?.season?.year) return this.data
+    return this.monthSeasonCache[season] ?? this.data
+  }
+
+  /** Ay matrisi — türetme store getter'ında (Gea kuralı 7); hücre anahtarları
+   *  ay bazlıdır: ay değişince tüm hücreler yeniden doğar (geçiş animasyonu). */
+  get calendarWeeks(): Array<Array<{ cellId: string; dayKey: string; day: number; inMonth: boolean }>> {
+    return monthMatrix(this.calendarMonthKey).map(week =>
+      week.map(cell => ({ cellId: `${this.calendarMonthKey}:${cell.dayKey}`, ...cell }))
+    )
+  }
+
+  /** Ayın maçlarını gün anahtarıyla grupla (kaynak: seçili ayın sezonu). */
+  get calendarMatchesByDay(): Record<string, any[]> {
+    const byDay: Record<string, any[]> = {}
+    for (const m of this.calendarSource?.matches ?? []) {
+      const key = dateKey(m.kickoff)
+      ;(byDay[key] ??= []).push(m)
+    }
+    return byDay
+  }
+
+  /** Tüm görünür günlerin hücre özetleri — hücreler tek adım store erişimiyle okur. */
+  get calendarSummaries(): Record<string, any> {
+    const byDay = this.calendarMatchesByDay
+    const out: Record<string, any> = {}
+    for (const week of this.calendarWeeks) {
+      for (const cell of week) {
+        out[cell.dayKey] = summarizeDay(cell.dayKey, byDay[cell.dayKey] ?? [])
+      }
+    }
+    return out
+  }
+
   onVisibilityGained() {
     if (Date.now() - this.lastLoadedAt > 45_000) this.load(true)
   }
@@ -121,8 +226,18 @@ class LeagueStore extends Store {
   }
 
   get matchesOfSelectedDate(): any[] {
-    const matches = this.data?.matches ?? []
-    return matches.filter(m => dateKey(m.kickoff) === this.selectedDate)
+    // Gün başka sezondaysa o sezonun payload'ından oku (#19 ay takvimi).
+    const source = this.selectedDateSource
+    return (source?.matches ?? []).filter(m => dateKey(m.kickoff) === this.selectedDate)
+  }
+
+  private get selectedDateSource(): any {
+    const mk = this.selectedDate ? this.selectedDate.slice(0, 7) : ''
+    const parsed = mk ? parseMonthKey(mk) : null
+    if (!parsed) return this.data
+    const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
+    if (season === this.data?.meta?.season?.year) return this.data
+    return this.monthSeasonCache[season] ?? this.data
   }
 
   /** Gün anahtarı → o günün maçları (saat sırasına göre). Önizleme popover'ı için. */
