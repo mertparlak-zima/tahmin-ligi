@@ -11,6 +11,8 @@ class UiStore extends Store {
   identityModalOpen = false
   toasts: Array<{ id: number; message: string }> = []
   identityId = ''
+  /** Oyuncular sayfası detay görünümü (#20 U8): '' = kart listesi. */
+  selectedPlayerId = ''
   datePreviewKey = ''
   datePreviewRect: { left: number; top: number; bottom: number; width: number } | null = null
 
@@ -54,6 +56,17 @@ class UiStore extends Store {
     this.identityModalOpen = false
   }
 
+  /** Oyuncular detay görünümü (#20 U8): store metoduyla yazım — dışarıdan
+   *  doğrudan alan ataması bu bileşende yeniden render tetiklemiyordu
+   *  (openSheet/openIdentityModal deseni kanıtlanmış). */
+  selectPlayer(playerId: string) {
+    this.selectedPlayerId = playerId
+  }
+
+  closePlayerDetail() {
+    this.selectedPlayerId = ''
+  }
+
   /** Tarih chip önizlemesi: hover'daki günün maçları (yalnız masaüstü hover). */
   openDatePreview(key: string, rect: { left: number; top: number; bottom: number; width: number }) {
     this.datePreviewKey = key
@@ -75,11 +88,11 @@ class UiStore extends Store {
     return this.playerIndex[this.identityId] ?? null
   }
 
-  /** Kimliğin açılmış tahminleri: bitmişler (yeniden eskiye) + başlamışlar (yakına). */
-  get myMatches(): any[] {
-    if (!this.identityId) return []
+  /** Oyuncunun açılmış tahminleri: bitmişler (yeniden eskiye) + başlamışlar (yakına). */
+  playerMatches(playerId: string): any[] {
+    if (!playerId) return []
     const matches: any[] = leagueStore.data?.matches ?? []
-    const mine = matches.filter(m => m.predictions.some((p: any) => p.playerId === this.identityId))
+    const mine = matches.filter(m => m.predictions.some((p: any) => p.playerId === playerId))
     const revealed = mine.filter(m => m.predictionsVisible)
     const finished = revealed
       .filter(m => m.isFinished)
@@ -90,13 +103,24 @@ class UiStore extends Store {
     return [...finished, ...started]
   }
 
-  /** Mühürlü (henüz açılmamış) tahmin sayısı. */
-  get sealedCount(): number {
-    if (!this.identityId) return 0
+  /** Oyuncunun mühürlü (henüz açılmamış) tahmin sayısı. */
+  sealedCountOf(playerId: string): number {
+    if (!playerId) return 0
     const matches: any[] = leagueStore.data?.matches ?? []
     return matches.filter(
-      m => !m.predictionsVisible && m.predictions.some((p: any) => p.playerId === this.identityId)
+      m => !m.predictionsVisible && m.predictions.some((p: any) => p.playerId === playerId)
     ).length
+  }
+
+  /** Oyuncunun tahmin GİRMEDİĞİ bitmemiş maçlar (#20 U8) — kimin girmediği
+   *  herkese açık bilgidir; outcome söz konusu değildir (mühürle çelişmez). */
+  missingMatches(playerId: string): any[] {
+    if (!playerId) return []
+    const matches: any[] = leagueStore.data?.matches ?? []
+    return matches.filter(
+      m => !m.isStarted && !m.isFinished && m.statusGroup !== 'inactive'
+        && !m.predictions.some((p: any) => p.playerId === playerId)
+    )
   }
 
   toast(message: string) {

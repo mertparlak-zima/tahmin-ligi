@@ -10,6 +10,7 @@ import {
   summarizeDay,
   todayMonthKey,
 } from '../utils/calendar.js'
+import { buildFlowEvents } from '../utils/flow.js'
 
 export type StatusFilter = 'all' | 'live' | 'upcoming' | 'finished'
 
@@ -37,6 +38,10 @@ class LeagueStore extends Store {
   selectedMonthKey = ''
   calendarLoading = false
   calendarError: string | null = null
+  /** Oyuncular detay görünümü (#20 U8): '' = kart listesi. leagueStore'da —
+   *  route sayfaları leagueStore yazılarına kanıtlanmış biçimde yeniden
+   *  render oluyor (uiStore alan yazıları bu sayfayı tetiklemiyordu). */
+  selectedPlayerId = ''
   /** Ay takviminin sezon payload önbelleği (sezon başına tek fetch). */
   private monthSeasonCache: Record<number, any> = {}
 
@@ -195,6 +200,15 @@ class LeagueStore extends Store {
     this.ensureMonthData()
   }
 
+  // --- Oyuncular detay görünümü (#20 U8) ---
+  selectPlayer(playerId: string) {
+    this.selectedPlayerId = playerId
+  }
+
+  closePlayerDetail() {
+    this.selectedPlayerId = ''
+  }
+
   /** Gün seçimi: maç listesi o günü; gün başka aydan ise takvim o aya geçer. */
   selectDay(dayKey: string) {
     this.selectedDate = dayKey
@@ -262,6 +276,27 @@ class LeagueStore extends Store {
       }
     }
     return out
+  }
+
+  /** Ay özeti (#20 E1/E2): seçili ayın maç/canlı/bitti sayıları + bugün. */
+  get calendarMonthStats(): { total: number; live: number; finished: number; todayCount: number } {
+    const byDay = this.calendarMatchesByDay
+    const prefix = this.calendarMonthKey
+    const today = todayKey()
+    let total = 0
+    let live = 0
+    let finished = 0
+    let todayCount = 0
+    for (const dayKey of Object.keys(byDay)) {
+      if (!dayKey.startsWith(prefix)) continue
+      for (const m of byDay[dayKey]) {
+        total++
+        if (m.isLive) live++
+        else if (m.isFinished) finished++
+      }
+      if (dayKey === today) todayCount = byDay[dayKey].length
+    }
+    return { total, live, finished, todayCount }
   }
 
   onVisibilityGained() {
@@ -424,6 +459,46 @@ class LeagueStore extends Store {
 
   get staleActive(): boolean {
     return this.staleInfo.level !== 'none'
+  }
+
+  /** Oyuncu kartları için tahmin durumu özeti (#20 U8 + E4):
+   *  sealed = mühürlü girilen, missing = bitmemiş ama girilmemiş,
+   *  form = son 5 bitmiş tahminin G/M dizisi (payload'dan ücretsiz türetim). */
+  get playerPredictionStats(): Record<string, { sealed: number; missing: number; form: string[] }> {
+    const players = this.data?.players ?? []
+    const matches = this.data?.matches ?? []
+    const out: Record<string, { sealed: number; missing: number; form: string[] }> = {}
+    for (const p of players) {
+      let sealed = 0
+      let missing = 0
+      const form: string[] = []
+      for (const m of matches) {
+        const pred = (m.predictions ?? []).find((x: any) => x.playerId === p.id)
+        if (!pred) {
+          if (!m.isStarted && !m.isFinished && m.statusGroup !== 'inactive') missing++
+          continue
+        }
+        if (!m.predictionsVisible) {
+          sealed++
+          continue
+        }
+        if (m.isFinished && pred.correct === true) form.push('G')
+        else if (m.isFinished && pred.correct === false) form.push('M')
+      }
+      out[p.id] = { sealed, missing, form: form.slice(-5) }
+    }
+    return out
+  }
+
+  /** Akış olayları (#20 U9): son tahmin girişleri (mühürlü) + sonuçlar. */
+  get flowEvents(): any[] {
+    const data = this.data
+    if (!data) return []
+    return buildFlowEvents({
+      recentPredictions: data.recentPredictions ?? [],
+      matches: data.matches ?? [],
+      players: data.players ?? [],
+    })
   }
 
   // --- Sezonlar (#18 PR2) ---

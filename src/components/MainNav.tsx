@@ -24,13 +24,13 @@ export default function MainNav() {
       </Link>
       <Link to="/tahminlerim" class="nav-item">
         <span class="nav-icon">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="9" />
-            <circle cx="12" cy="12" r="5" />
-            <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </span>
-        <span class="nav-label">Tahminlerim</span>
+        <span class="nav-label">Oyuncular</span>
       </Link>
       <Link to="/gecmis" class="nav-item">
         <span class="nav-icon">
@@ -40,7 +40,7 @@ export default function MainNav() {
             <path d="M12 7v5l3.5 2" />
           </svg>
         </span>
-        <span class="nav-label">Geçmiş</span>
+        <span class="nav-label">Akış</span>
       </Link>
     </nav>
   )

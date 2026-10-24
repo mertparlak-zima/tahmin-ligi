@@ -12,7 +12,7 @@ export default function TopBar() {
   return (
     <header class="topbar">
       <div class="topbar-inner">
-        <div class="brand">
+        <Link to="/" class="brand" aria-label="Ana sayfa">
           <span class="brand-mark">
             <img src="/favicon.svg" alt="" />
           </span>
@@ -20,7 +20,8 @@ export default function TopBar() {
             <span class="brand-name">{meta?.leagueName ?? 'Tahmin Ligi'}</span>
             <span class="brand-sub">4 takım · 3 kupa · arkadaş ligi</span>
           </div>
-        </div>
+          {adminStore.authed ? <span class="admin-mode-badge">YÖNETİM</span> : null}
+        </Link>
         <div class="topbar-actions">
           {leagueStore.hasLive ? (
             <span class="live-pill">
@@ -41,6 +42,23 @@ export default function TopBar() {
               </svg>
             )}
           </Link>
+          {adminStore.authed ? (
+            <button
+              class="icon-btn admin-exit"
+              aria-label="Yönetimden çık"
+              title="Yönetimden çık"
+              click={() => {
+                adminStore.logout()
+                uiStore.toast('Yönetim oturumu kapatıldı.')
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+                <path d="M16 17l5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            </button>
+          ) : null}
           <button
             class={cn('icon-btn', leagueStore.loading && 'spinning')}
             aria-label="Yenile"

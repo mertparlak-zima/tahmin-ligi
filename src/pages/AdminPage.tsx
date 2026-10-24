@@ -68,7 +68,6 @@ export default class AdminPage extends Component {
           <div class="error-sub">{adminStore.error}</div>
           <div class="row-actions">
             <button class="btn primary" click={() => adminStore.bootstrap()}>Tekrar dene</button>
-            <button class="btn ghost" click={() => adminStore.logout()}>Çıkış yap</button>
           </div>
         </div>
       )
@@ -85,13 +84,12 @@ export default class AdminPage extends Component {
               Oyuncular
             </button>
             <button class={cn('admin-tab', adminStore.tab === 'scoring' && 'active')} click={() => (adminStore.tab = 'scoring')}>
-              Puanlama
+              Puanlama Kuralı
             </button>
             <button class={cn('admin-tab', adminStore.tab === 'data' && 'active')} click={() => (adminStore.tab = 'data')}>
               Veri
             </button>
           </div>
-          <button class="btn ghost sm" click={() => adminStore.logout()}>Çıkış</button>
         </div>
 
         {adminStore.tab === 'predictions' ? <PredictionsTab /> : null}

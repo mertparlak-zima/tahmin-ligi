@@ -8,7 +8,6 @@ import {
   deleteAvatar,
   login,
   savePredictions,
-  saveScoring,
   sync,
   updatePlayer,
   uploadAvatar,
@@ -500,54 +499,8 @@ suite.test('deleteAvatar: playerId query string\'den de okunur', async () => {
   assert.equal((await res.json()).ok, true)
 })
 
-// --- saveScoring ---
-
-suite.test('saveScoring: doğrulama hataları 400', async () => {
-  const sup = createMemorySupabase()
-  const cases = [
-    { correctOutcome: 101, message: 'Puan 0-100 arası tam sayı olmalı.' },
-    { correctOutcome: -1, message: 'Puan 0-100 arası tam sayı olmalı.' },
-    { correctOutcome: 2.5, message: 'Puan 0-100 arası tam sayı olmalı.' },
-    { correctOutcome: 'abc', message: 'Puan 0-100 arası tam sayı olmalı.' },
-    { status: 'bogus', message: 'Durum provisional veya final olmalı.' },
-    { label: 'x'.repeat(81), message: 'Etiket 1-80 karakter olmalı.' },
-    { label: '', message: 'Etiket 1-80 karakter olmalı.' },
-  ]
-  for (const body of cases) {
-    const res = await saveScoring(sup, req(body))
-    assert.equal(res.status, 400, `400 bekleniyordu: ${JSON.stringify(body).slice(0, 40)}`)
-    assert.equal((await res.json()).error, body.message)
-  }
-  // Hatalı istekler mevcut config'i bozmaz
-  assert.deepEqual(
-    sup.store.app_config.find(c => c.key === 'scoring').value,
-    { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 },
-  )
-})
-
-suite.test('saveScoring: tam güncelleme app_config\'e upsert edilir', async () => {
-  const sup = createMemorySupabase()
-  const res = await saveScoring(sup, req({ label: 'Yeni kural', status: 'final', correctOutcome: 2 }))
-  assert.equal(res.status, 200)
-  const body = await res.json()
-  assert.deepEqual(body.scoring, { label: 'Yeni kural', status: 'final', correctOutcome: 2 })
-  assert.deepEqual(
-    sup.store.app_config.find(c => c.key === 'scoring').value,
-    { label: 'Yeni kural', status: 'final', correctOutcome: 2 },
-  )
-})
-
-suite.test('saveScoring: kısmi güncelleme varsayılanla birleşir; satır yoksa oluşturur', async () => {
-  const sup = createMemorySupabase({ app_config: [] })
-  const res = await saveScoring(sup, req({ correctOutcome: 3 }))
-  assert.equal(res.status, 200)
-  const body = await res.json()
-  assert.equal(body.scoring.label, 'Doğru sonuç 1 puan', 'etiket varsayıldan gelir')
-  assert.equal(body.scoring.status, 'provisional')
-  assert.equal(body.scoring.correctOutcome, 3)
-  assert.equal(sup.store.app_config.length, 1, 'satır upsert ile oluştu')
-  assert.equal(sup.store.app_config[0].key, 'scoring')
-})
+// --- saveScoring: KALDIRILDI (#20 U6) — kural DB'den yönetilir, uç kapandı.
+// Router'ın bilinmeyen uç 404'ü eski yolu kapsar (route testi suite'te var).
 
 // --- sync ---
 

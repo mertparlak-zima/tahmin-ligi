@@ -97,12 +97,12 @@ const del = await api('/api/admin/predictions', {
 })
 check('tahmin silme', del.status === 200, `deleted=${del.json?.deleted}`)
 
-// 11) Puanlama güncelleme
-const scoring = await api('/api/admin/scoring', {
+// 11) Puanlama ucu KALDIRILDI (#20 U6): kural DB'den yönetilir — uç artık 404.
+const scoringGone = await api('/api/admin/scoring', {
   method: 'PUT',
-  body: { correctOutcome: 1, label: 'Doğru sonuç 1 puan', status: 'final' },
+  body: { correctOutcome: 1 },
 })
-check('puanlama güncelleme', scoring.status === 200, `status=${scoring.json?.scoring?.status}`)
+check('puanlama ucu kapalı (404)', scoringGone.status === 404, `status=${scoringGone.status}`)
 
 // 12) Test oyuncusunu temizle (pasife al)
 const cleanup = await api('/api/admin/players', {

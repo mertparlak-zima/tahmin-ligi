@@ -1,30 +1,52 @@
 import { Component } from '@geajs/core'
 import adminStore from '../../stores/admin-store'
 import EditorDay from './EditorDay'
-import CompOption from '../../components/CompOption'
+import Avatar from '../../components/Avatar'
+import { cn } from '../../utils/cn'
+
+// Oyuncu filtre çipi (#20 U4): keyed map öğesi ham element olamaz (AGENTS
+// kural 6) → bileşen. Aktiflik YALNIZCA store erişiminden okunur (kural 9).
+class PlayerChip extends Component {
+  template({ player }: any) {
+    return (
+      <button
+        class={cn('acc-chip', adminStore.playerFilter === player.id && 'on')}
+        aria-pressed={adminStore.playerFilter === player.id ? 'true' : 'false'}
+        click={() => adminStore.togglePlayerFilter(player.id)}
+      >
+        <Avatar
+          color={player.color}
+          initials={player.initials}
+          photo={player.avatarUrl ?? null}
+          size="sm"
+          title={player.name}
+        />
+        <span class="acc-chip-name">{player.name}</span>
+      </button>
+    )
+  }
+}
 
 export default class PredictionsTab extends Component {
   template() {
-    const players: any[] = adminStore.players
     const openCount = adminStore.openMatchCount
 
     return (
       <div class="admin-preds">
-        <div class="admin-toolbar">
-          <select
-            class="comp-select"
-            aria-label="Oyuncu"
-            value={adminStore.editorPlayerId}
-            change={e => adminStore.setEditorPlayer((e.target as HTMLSelectElement).value)}
+        <div class="acc-filter" role="group" aria-label="Oyuncu filtresi">
+          <button
+            class={cn('acc-chip', adminStore.playerFilter === '' && 'on')}
+            aria-pressed={adminStore.playerFilter === '' ? 'true' : 'false'}
+            click={() => adminStore.clearPlayerFilter()}
           >
-            {players.map((p: any) => (
-              <CompOption
-                key={p.id}
-                value={p.id}
-                label={p.isActive ? p.name : `${p.name} (pasif)`}
-              />
-            ))}
-          </select>
+            Tümü
+          </button>
+          {adminStore.activePlayers.map(player => (
+            <PlayerChip key={player.id} player={player} />
+          ))}
+        </div>
+
+        <div class="admin-toolbar">
           <button class="btn ghost sm" click={() => adminStore.toggleLocked()}>
             {adminStore.showLocked
               ? '🔒 Geçmiş maçları gizle'
@@ -33,12 +55,13 @@ export default class PredictionsTab extends Component {
         </div>
 
         <div class="admin-hint">
-          <b>{openCount} tahmine açık maç</b> — yalnızca bu maçlardaki seçimler kaydedilebilir.
-          Tahminler maç başlama saatinde otomatik kilitlenir; bitmiş maçlar değiştirilemez.
+          <b>{openCount} tahmine açık maç</b> — satırı aç, oyuncu seçimlerini yap ve o maç için
+          Kaydet'e bas. Tahminler maç başlama saatinde otomatik kilitlenir; bitmiş maçlar
+          değiştirilemez.
         </div>
 
-        {players.length === 0 ? (
-          <div class="empty">Önce Oyuncular sekmesinden oyuncu ekle.</div>
+        {adminStore.activePlayerCount === 0 ? (
+          <div class="empty">Önce Oyuncular sekmesinden oyuncu ekle veya aktifleştir.</div>
         ) : adminStore.editorDays.length === 0 ? (
           <div class="empty">Tahmine açık maç yok.</div>
         ) : (
@@ -53,15 +76,6 @@ export default class PredictionsTab extends Component {
             {adminStore.lockedDays.map(dayGroup => (
               <EditorDay key={dayGroup.day} day={dayGroup.day} matches={dayGroup.matches} locked />
             ))}
-          </div>
-        ) : null}
-
-        {adminStore.dirtyCount > 0 ? (
-          <div class="save-bar">
-            <span>{adminStore.dirtyCount} maçta kaydedilmemiş değişiklik</span>
-            <button class="btn primary sm" disabled={adminStore.saving} click={() => adminStore.savePredictions()}>
-              {adminStore.saving ? 'Kaydediliyor…' : 'Kaydet'}
-            </button>
           </div>
         ) : null}
       </div>

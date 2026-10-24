@@ -42,7 +42,7 @@ export default function CalDayCell({ cell }: { cell: { cellId: string; dayKey: s
         uiStore.closeDatePreview()
       }}
     >
-      <span class="cal-daynum">{cell.day}</span>
+      <span class="cal-watermark" aria-hidden="true">{cell.day}</span>
       {summary.hasLive ? <span class="cal-live-dot" aria-hidden="true"></span> : null}
       {summary.chips.map((chip: any) => <CalChip key={chip.id} chip={chip} />)}
       {summary.overflow > 0 ? <span class="cal-overflow">+{summary.overflow}</span> : null}

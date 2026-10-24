@@ -75,7 +75,9 @@ const mainMatches = [
   row({
     id: 'm4', external_id: '4', competition: 'EL', kickoff: iso(now + 24 * hour), status: 'TIMED',
     home_name: 'Fenerbahçe', home_short: 'Fenerbahçe',
+    home_crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/2393.png',
     away_name: 'Lyon', away_short: 'Lyon',
+    away_crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/194.png',
     home_score: null, away_score: null,
   }),
 ]
@@ -85,13 +87,22 @@ const mainPredictions = [
   { player_id: 'p1', match_id: 'm2', outcome: 'H' }, // doğru (derbi)
   { player_id: 'p1', match_id: 'm6', outcome: 'H' }, // doğru
   { player_id: 'p1', match_id: 'm3', outcome: 'H' }, // canlı → görünüyor
-  { player_id: 'p1', match_id: 'm4', outcome: 'H' }, // gelecek → mühürlü
+  // U9: gelecek (mühürlü) maç — damgalar taşınır, outcome taşımaz;
+  // updated_at > created_at → akışta "güncelledi" ayrımı için senaryo.
+  {
+    player_id: 'p1', match_id: 'm4', outcome: 'H',
+    created_at: iso(now - 30 * hour), updated_at: iso(now - 10 * hour),
+  },
   { player_id: 'p2', match_id: 'm1', outcome: 'A' }, // doğru
   { player_id: 'p2', match_id: 'm2', outcome: 'D' }, // yanlış
   { player_id: 'p2', match_id: 'm3', outcome: 'D' }, // canlı
   { player_id: 'p2', match_id: 'm5', outcome: 'A' }, // ertelenmiş → mühürlü kalmalı
   { player_id: 'p3', match_id: 'm1', outcome: 'A' }, // pasif → hiçbir yerde görünmemeli
-  { player_id: 'p4', match_id: 'm1', outcome: 'A' }, // doğru
+  // U9: bitmiş maç — created_at == updated_at → akışta "girdi" senaryosu.
+  {
+    player_id: 'p4', match_id: 'm1', outcome: 'A',
+    created_at: iso(now - 90 * hour), updated_at: iso(now - 90 * hour),
+  },
   { player_id: 'p4', match_id: 'm2', outcome: 'H' }, // doğru (derbi)
   { player_id: 'p4', match_id: 'm6', outcome: 'D' }, // yanlış
 ]
@@ -130,11 +141,15 @@ suite.test('mühür: gelecek TIMED maçta tahmin yalnız "kim" olarak görünür
   assert.equal(sealed.name, 'Ogün')
   assert.equal(sealed.initials, 'O')
   assert.equal(sealed.color, '#b8f34a')
+  // U9: tahmin satırı damga TAŞIMAZ (yalnız meta.recentPredictions'ta; payload
+  // diyeti). Sealed satırda outcome/label/points/correct HÂLÂ YOK.
   assert.deepEqual(
     Object.keys(sealed).sort(),
     ['avatarUrl', 'color', 'initials', 'name', 'playerId'],
-    'mühürlü satırda outcome/label/points/correct OLMAMALI',
+    'mühürlü satırda outcome/label/points/correct/enteredAt OLMAMALI',
   )
+  assert.equal(sealed.outcome, undefined, 'outcome HÂLÂ sızmamalı')
+  assert.equal(sealed.enteredAt, undefined, 'damga satırdan taşınmaz (#20 diyet)')
   assert.equal(m4.score, null)
 })
 
@@ -182,6 +197,36 @@ suite.test('bitmiş maçta puan/etiket/doğruluk dolu gelir', () => {
   assert.equal(ogun.points, 0)
   assert.equal(ogun.correct, false)
   assert.equal(ogun.label, 'Galatasaray yener')
+})
+
+suite.test('recentPredictions (U9): akış olayları — outcome yok, mühürlü maç dahil, updated desc', () => {
+  const recent = payload.recentPredictions
+  assert.ok(Array.isArray(recent) && recent.length >= 2, 'en az iki damgalı olay')
+  for (const r of recent) {
+    assert.deepEqual(
+      Object.keys(r).sort(),
+      ['enteredAt', 'matchId', 'playerId', 'updatedAt'],
+      'olay yalnız kim+maç+damga taşır',
+    )
+  }
+  // En yeni olay: p1'in MÜHÜRLÜ (gelecek) m4 tahmininin güncellemesi —
+  // outcome olayda zaten yok; akış "güncelledi" olarak gösterebilir.
+  assert.equal(recent[0].playerId, 'p1')
+  assert.equal(recent[0].matchId, 'm4')
+  assert.equal(recent[0].enteredAt, iso(now - 30 * hour))
+  assert.equal(recent[0].updatedAt, iso(now - 10 * hour))
+  // Sıra updated_at desc.
+  const withTs = recent.filter(r => r.updatedAt)
+  for (let i = 1; i < withTs.length; i++) {
+    assert.ok(
+      Date.parse(withTs[i - 1].updatedAt) >= Date.parse(withTs[i].updatedAt),
+      'olaylar updated_at desc',
+    )
+  }
+  // p4:m1 girişi (created==updated → "girdi" olayı).
+  const ali = recent.find(r => r.playerId === 'p4' && r.matchId === 'm1')
+  assert.equal(ali.enteredAt, iso(now - 90 * hour))
+  assert.equal(ali.updatedAt, iso(now - 90 * hour))
 })
 
 suite.test('pasif oyuncu her yerden dışlanır', () => {
@@ -327,6 +372,30 @@ suite.test('buildAdminPayload: kilit bayrakları + "pid:mid" tahmin haritası', 
   assert.equal(p3.isActive, false, 'pasif oyuncu admin listesinde işaretli')
   assert.deepEqual(admin.scoring, { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 })
   assert.equal(admin.sync.id, 1)
+})
+
+suite.test('buildAdminPayload (U4): uzun takım adları + crest + competitions listesi', async () => {
+  const admin = await buildAdminPayload(mainSupabase())
+  const m4 = admin.matches.find(m => m.id === 'm4')
+  assert.equal(m4.homeShort, 'Fenerbahçe', 'homeShort korunur')
+  assert.equal(m4.awayShort, 'Lyon', 'awayShort korunur')
+  assert.equal(m4.homeName, 'Fenerbahçe', 'uzun ev sahibi adı')
+  assert.equal(m4.awayName, 'Lyon', 'uzun deplasman adı')
+  assert.equal(m4.homeCrest, 'https://a.espncdn.com/i/teamlogos/soccer/500/2393.png', 'ev crest URL')
+  assert.equal(m4.awayCrest, 'https://a.espncdn.com/i/teamlogos/soccer/500/194.png', 'deplasman crest URL')
+
+  const m1 = admin.matches.find(m => m.id === 'm1')
+  assert.equal(m1.homeName, 'Galatasaray')
+  assert.equal(m1.awayName, 'Barcelona')
+  assert.equal(m1.homeCrest, null, 'crest kolonu yoksa/null → null (deploy sırası güvenli)')
+  assert.equal(m1.awayCrest, null)
+
+  // Turnuva listesi public payload'daki desenle aynı: kod + uzun ad.
+  assert.deepEqual(admin.competitions, [
+    { code: 'CL', name: 'UEFA Şampiyonlar Ligi' },
+    { code: 'EL', name: 'UEFA Avrupa Ligi' },
+    { code: 'UECL', name: 'UEFA Konferans Ligi' },
+  ])
 })
 
 // --- Sezon/lig meta + izolasyon (v6 P5/P6/P2-bonus) ---

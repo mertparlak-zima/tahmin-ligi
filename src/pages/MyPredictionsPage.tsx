@@ -1,41 +1,159 @@
+// Oyuncular (#20 U8): kimlik seçimi ZORUNLU DEĞİL — tüm oyuncuların kartları
+// listelenir; karta tıklayınca o oyuncunun karne detayı (sayfa içi görünüm).
+// "Bu benim" işaretleme isteğe bağlıdır (SEN vurguları için).
+// Gea: class component, erken return yok; türetilmiş listeler store'da
+// (ui-store playerMatches/missingMatches, league-store playerPredictionStats).
+
 import { Component } from '@geajs/core'
-import { router } from '../router'
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
-import SkeletonCard from '../components/SkeletonCard'
 import Avatar from '../components/Avatar'
+import FormChips from '../components/FormChips'
 import PredictionCard from '../components/PredictionCard'
+import Crest from '../components/Crest'
+import CompBadge from '../components/CompBadge'
+import SkeletonCard from '../components/SkeletonCard'
+import { fmtFullDate, fmtTime } from '../utils/format'
+import { cn } from '../utils/cn'
 
-export default class MyPredictionsPage extends Component {
-  private identityPromptShown = false
-
-  created() {
-    // Veri geç gelirse de (ilk yükleme/polling) kimlik sorusu bir kez açılsın;
-    // yalnız bu sayfadayken — modal global bir overlay.
-    const promptIfNeeded = () => {
-      if (this.identityPromptShown) return
-      if (router.path !== '/tahminlerim') return
-      if (!uiStore.identityId && (leagueStore.data?.players ?? []).length > 0) {
-        this.identityPromptShown = true
-        uiStore.openIdentityModal()
-      }
-    }
-    promptIfNeeded()
-    leagueStore.observe('data', promptIfNeeded)
+class PlayerCard extends Component {
+  template({ player, stats }: any) {
+    return (
+      <button
+        class={cn('player-card', uiStore.identityId === player.id && 'me')}
+        click={() => {
+          leagueStore.selectPlayer(player.id)
+        }}
+      >
+        <span class="player-card-top">
+          <Avatar color={player.color} initials={player.initials} size="lg" photo={player.avatarUrl ?? null} />
+          {uiStore.identityId === player.id ? <span class="you-tag">SEN</span> : null}
+        </span>
+        <span class="player-card-name">{player.name}</span>
+        <span class="player-card-stats">
+          <b>{player.points}</b> puan · {player.correctOutcomes} doğru
+        </span>
+        <span class="player-card-sub">%{player.accuracy} isabet</span>
+        <span class="player-card-tags">
+          {stats && stats.sealed > 0 ? <span class="player-tag sealed">🔒 {stats.sealed} mühürlü</span> : null}
+          {stats && stats.missing > 0 ? <span class="player-tag missing">{stats.missing} girilmedi</span> : null}
+        </span>
+        {stats && stats.form.length > 0 ? <FormChips form={stats.form} /> : null}
+      </button>
+    )
   }
+}
 
+class MissingRow extends Component {
+  template({ match }: any) {
+    return (
+      <div class="missing-row">
+        <CompBadge code={match.competitionCode} size="sm" />
+        <span class="missing-teams">
+          <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={22} />
+          <span>{match.home.short}</span>
+          <span class="missing-vs">–</span>
+          <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={22} />
+          <span>{match.away.short}</span>
+        </span>
+        <span class="missing-time">{fmtFullDate(match.kickoff)} · {fmtTime(match.kickoff)}</span>
+        <span class="player-tag missing">tahmin yok</span>
+      </div>
+    )
+  }
+}
+
+// Detay görünümü child component'i (#20 U8): playerId prop'u JSX BINDING'inden
+// gelir (doğrudan store okuması → taze); hesaplamalar kendi prop'undan yapar
+// (kural 9 deseni — body const'ları bayat kalıyordu, view anahtarı bu yüzden
+// parent JSX'inde doğrudan store okumasıyla çevrilir).
+class PlayerDetail extends Component {
+  template({ playerId }: any) {
+    const player = leagueStore.standings.find((r: any) => r.id === playerId)
+    const pRow = leagueStore.players.find((p: any) => p.id === playerId)
+    const matches = uiStore.playerMatches(playerId)
+    const sealed = uiStore.sealedCountOf(playerId)
+    const missing = uiStore.missingMatches(playerId)
+    const wrong = player ? player.played - player.correctOutcomes : 0
+    return (
+      <div>
+        <button class="players-back" click={() => leagueStore.closePlayerDetail()}>‹ Oyuncular</button>
+        <div class="identity-hero">
+          <Avatar color={pRow?.color ?? '#b8f34a'} initials={pRow?.initials ?? '?'} size="xl" photo={pRow?.avatarUrl ?? null} />
+          <div class="identity-hero-text">
+            <span class="identity-name">{pRow?.name ?? 'Oyuncu'}</span>
+            <span class="identity-sub">
+              {player ? `${player.rank}. sırada · ${player.played} maçta tahmin` : 'Henüz sıralaması yok'}
+            </span>
+          </div>
+          {uiStore.identityId === playerId ? (
+            <span class="you-tag">SEN</span>
+          ) : (
+            <button class="btn ghost sm" click={() => uiStore.setIdentity(playerId)}>Bu benim</button>
+          )}
+        </div>
+
+        <div class="stat-cards">
+          <div class="stat-card">
+            <span class="stat-label">Puan</span>
+            <span class="stat-value">{player?.points ?? 0}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Doğru sonuç</span>
+            <span class="stat-value">{player?.correctOutcomes ?? 0}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Yanlış sonuç</span>
+            <span class="stat-value">{wrong}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">İsabet</span>
+            <span class="stat-value">{player?.accuracy ?? 0}%</span>
+          </div>
+        </div>
+
+        {sealed > 0 ? (
+          <div class="sealed-note">🔒 {sealed} tahmini mühürlü — maçlar başlayınca açılacak.</div>
+        ) : null}
+
+        {matches.length === 0 ? (
+          <div class="empty">
+            <div class="empty-title">Açılan tahmin yok</div>
+            <div class="empty-sub">Maçlar başlayınca tahminler burada listelenir.</div>
+          </div>
+        ) : (
+          <div class="pred-cards">
+            {uiStore.playerMatches(playerId).map(match => (
+              <PredictionCard key={match.id} match={match} identityId={playerId} own={uiStore.identityId === playerId} />
+            ))}
+          </div>
+        )}
+
+        {missing.length > 0 ? (
+          <div class="missing-section">
+            <div class="sheet-section-title">
+              Girilmeyen maçlar
+              <span class="sheet-section-meta">{missing.length} maç</span>
+            </div>
+            {uiStore.missingMatches(playerId).map(match => (
+              <MissingRow key={match.id} match={match} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+}
+
+export default class PlayersPage extends Component {
   template() {
-    const identity = uiStore.identity
-    const players: any[] = leagueStore.data?.players ?? []
-
     if (leagueStore.loadingInitial) {
       return (
         <div class="page-skeleton">
-          <SkeletonCard shape="stat" />
           <div class="stat-cards">
             {[0, 1, 2, 3].map(i => <SkeletonCard key={i} shape="stat" />)}
           </div>
-          {[0, 1].map(i => <SkeletonCard key={i} />)}
+          {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
         </div>
       )
     }
@@ -50,79 +168,34 @@ export default class MyPredictionsPage extends Component {
       )
     }
 
-    if (players.length === 0) {
-      return (
-        <div class="empty big">
-          <div class="empty-title">Henüz oyuncu yok</div>
-          <div class="empty-sub">Oyuncular yönetim panelinden eklenir.</div>
-        </div>
-      )
-    }
-
-    if (!identity) {
-      return (
-        <div class="empty big">
-          <div class="empty-title">Kimsin?</div>
-          <div class="empty-sub">Tahmin karneni görmek için adını seç.</div>
-          <button class="btn primary" click={() => uiStore.openIdentityModal()}>Oyuncu seç</button>
-        </div>
-      )
-    }
-
-    const myRow = leagueStore.standings.find((r: any) => r.id === identity.id)
-    const wrongCount = myRow ? myRow.played - myRow.correctOutcomes : 0
-    const myMatches = uiStore.myMatches
-    const sealed = uiStore.sealedCount
-
+    // View anahtarı JSX İÇİNDE doğrudan store okumasıyla (body const bayat
+    // kalıyor; binding taze — kanıtlandı). Detay, prop'lu child component.
+    const standings = leagueStore.standings
     return (
-      <div class="mypage">
-        <div class="identity-hero">
-          <Avatar color={identity.color} initials={identity.initials} size="xl" photo={identity.avatarUrl ?? null} />
-          <div class="identity-hero-text">
-            <span class="identity-name">{identity.name}</span>
-            <span class="identity-sub">
-              {myRow ? `${myRow.rank}. sıradasın · ${myRow.played} maçta tahmin` : 'Henüz sıralaman yok'}
-            </span>
-          </div>
-          <button class="btn ghost sm" click={() => uiStore.openIdentityModal()}>Değiştir</button>
-        </div>
+      <div class="players-page">
+        {leagueStore.selectedPlayerId === '' ? (
+          <div>
+            <div class="page-meta">
+              <span class="meta-main">{standings.length} oyuncu · tahminler</span>
+              <button class="btn ghost sm" click={() => uiStore.openIdentityModal()}>
+                {uiStore.identityId ? 'Kimliği değiştir' : 'Benim tahminlerim'}
+              </button>
+            </div>
 
-        <div class="stat-cards">
-          <div class="stat-card">
-            <span class="stat-label">Puan</span>
-            <span class="stat-value">{myRow?.points ?? 0}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Doğru sonuç</span>
-            <span class="stat-value">{myRow?.correctOutcomes ?? 0}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Yanlış sonuç</span>
-            <span class="stat-value">{wrongCount}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">İsabet</span>
-            <span class="stat-value">{myRow?.accuracy ?? 0}%</span>
-          </div>
-        </div>
-
-        {sealed.length > 0 ? (
-          <div class="sealed-note">
-            🔒 {sealed.length} tahminin mühürlü — maçlar başlayınca açılacak.
-          </div>
-        ) : null}
-
-        {myMatches.length === 0 ? (
-          <div class="empty">
-            <div class="empty-title">Açılan tahmin yok</div>
-            <div class="empty-sub">Maçlar başlayınca tahminlerin burada listelenir.</div>
+            <div class="players-grid">
+              {standings.map(row => (
+                <PlayerCard key={row.id} player={row} stats={leagueStore.playerPredictionStats[row.id]} />
+              ))}
+            </div>
+            {standings.length === 0 ? (
+              <div class="empty big">
+                <div class="empty-title">Henüz oyuncu yok</div>
+                <div class="empty-sub">Oyuncular yönetim panelinden eklenir.</div>
+              </div>
+            ) : null}
           </div>
         ) : (
-          <div class="pred-cards">
-            {uiStore.myMatches.map(match => (
-              <PredictionCard key={match.id} match={match} identityId={uiStore.identityId} />
-            ))}
-          </div>
+          <PlayerDetail playerId={leagueStore.selectedPlayerId} />
         )}
       </div>
     )

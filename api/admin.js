@@ -318,40 +318,9 @@ export async function deleteAvatar(supabase, request) {
   return json(200, { ok: true, player: { ...updated, initials: initialsOf(updated.name) } })
 }
 
-export async function saveScoring(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const { data: current } = await supabase
-    .from('app_config')
-    .select('value')
-    .eq('key', 'scoring')
-    .maybeSingle()
-
-  const scoring = { ...DEFAULT_SCORING, ...(current?.value ?? {}) }
-  if (body.label !== undefined) {
-    const label = String(body.label).trim()
-    if (label.length < 1 || label.length > 80) return json(400, { error: 'Etiket 1-80 karakter olmalı.' })
-    scoring.label = label
-  }
-  if (body.status !== undefined) {
-    if (!['provisional', 'final'].includes(body.status)) {
-      return json(400, { error: 'Durum provisional veya final olmalı.' })
-    }
-    scoring.status = body.status
-  }
-  if (body.correctOutcome !== undefined) {
-    const n = Number(body.correctOutcome)
-    if (!Number.isInteger(n) || n < 0 || n > 100) {
-      return json(400, { error: 'Puan 0-100 arası tam sayı olmalı.' })
-    }
-    scoring.correctOutcome = n
-  }
-
-  const { error } = await supabase
-    .from('app_config')
-    .upsert({ key: 'scoring', value: scoring }, { onConflict: 'key' })
-  if (error) return json(500, { error: `Puanlama kaydedilemedi: ${error.message}` })
-  return json(200, { ok: true, scoring })
-}
+// Puanlama kuralı ucu KALDIRILDI (#20 U6): kural yalnız DB'den yönetilir
+// (app_config 'scoring'); panel salt-okunur gösterir. Eski uca istek →
+// router'ın bilinmeyen uç 404'ü döner.
 
 export async function sync(supabase) {
   try {
@@ -390,8 +359,6 @@ async function route(request) {
         return await uploadAvatar(supabase, request)
       case 'DELETE /api/admin/players/avatar':
         return await deleteAvatar(supabase, request)
-      case 'PUT /api/admin/scoring':
-        return await saveScoring(supabase, request)
       case 'POST /api/admin/sync':
         return await sync(supabase)
       default:

@@ -138,10 +138,19 @@ function chipTextOf(match, tone) {
 
 function chipOf(match) {
   const tone = toneOfMatch(match)
+  // Bitmiş maçta takım renklendirmesi (#20 eki): kazanan yeşil, kaybeden
+  // kırmızı, beraberlikte ikisi de gri — CalChip sınıfla uygular.
+  let outcome = null
+  if (tone === 'finished' && match.score && match.score.home != null && match.score.away != null) {
+    outcome = match.score.home > match.score.away ? 'H' : match.score.home < match.score.away ? 'A' : 'D'
+  }
   return {
     id: match.id,
     title: `${match.home?.name ?? ''} – ${match.away?.name ?? ''}`,
     label: `${abbrOfTeam(match.home?.name, match.home?.tla)}–${abbrOfTeam(match.away?.name, match.away?.tla)}`,
+    homeAbbr: abbrOfTeam(match.home?.name, match.home?.tla),
+    awayAbbr: abbrOfTeam(match.away?.name, match.away?.tla),
+    outcome,
     compCode: match.competitionCode ?? null,
     tone,
     text: chipTextOf(match, tone),

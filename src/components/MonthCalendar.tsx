@@ -10,12 +10,22 @@ import { WEEKDAY_HEADERS, monthTitle } from '../utils/calendar.js'
 
 export default class MonthCalendar extends Component {
   template() {
+    const stats = leagueStore.calendarMonthStats
+    const summary = [
+      `${stats.total} maç`,
+      stats.live > 0 ? `${stats.live} canlı` : '',
+      stats.finished > 0 ? `${stats.finished} bitti` : '',
+      stats.todayCount > 0 ? `bugün ${stats.todayCount} maç` : '',
+    ].filter(Boolean).join(' · ')
     return (
       <div class="cal-root">
         <div class="cal-head">
           <button class="cal-nav" aria-label="Önceki ay" click={() => leagueStore.selectMonth(-1)}>‹</button>
           <div class="cal-title-wrap">
             <span class="cal-title">{monthTitle(leagueStore.calendarMonthKey)}</span>
+            {summary ? <span class="cal-sub">{summary}</span> : null}
+          </div>
+          <div class="cal-head-right">
             {leagueStore.isCurrentMonth ? null : (
               <button class="cal-today-btn" click={() => leagueStore.goToTodayMonth()}>Bugün</button>
             )}

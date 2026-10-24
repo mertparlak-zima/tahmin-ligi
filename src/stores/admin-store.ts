@@ -40,15 +40,20 @@ class AdminStore extends Store {
   error: string | null = null
 
   tab = 'predictions'
-  editorPlayerId = ''
   showLocked = false
+  // #20 U4: taslaklar 'playerId:matchId' anahtarlı (payload predictionMap ile
+  // aynı biçim); değer '' = tahmin yok (kaydedilince satır silinir).
   drafts: Record<string, string> = {}
   baseline: Record<string, string> = {}
+  // Aynı anda en fazla bir akordiyon açık.
+  openMatchId: string | null = null
+  // '' = tüm oyuncular; setse akordiyon satırları tek oyuncuya iner (çip).
+  playerFilter = ''
+  // Kaydet sürerken o maçın düğmesi kilitli.
+  savingMatchId: string | null = null
 
-  saving = false
   syncRunning = false
   playerForm = { name: '', color: '#b8f34a' }
-  scoringForm = { label: '', status: 'provisional', correctOutcome: 1 }
 
   // --- Avatar editörü (#17) ---
   avatarEditorOpen = false
@@ -89,6 +94,8 @@ class AdminStore extends Store {
     this.data = null
     this.drafts = {}
     this.baseline = {}
+    this.openMatchId = null
+    this.playerFilter = ''
     sessionStorage.removeItem(ADMIN_KEY)
   }
 
@@ -97,9 +104,7 @@ class AdminStore extends Store {
     try {
       this.data = await api('/api/admin/bootstrap')
       this.error = null
-      this.ensureEditorPlayer()
       this.resetDrafts()
-      this.syncScoringForm()
     } catch (err: any) {
       this.error = err.message
       if (/Yetkisiz|401/.test(err.message)) this.logout()
@@ -108,43 +113,41 @@ class AdminStore extends Store {
     }
   }
 
-  private ensureEditorPlayer() {
-    const players: any[] = this.data?.players ?? []
-    if (!players.length) {
-      this.editorPlayerId = ''
-      return
-    }
-    if (!players.some(p => p.id === this.editorPlayerId)) {
-      this.editorPlayerId = players[0].id
-    }
-  }
-
+  /** Admin payload predictions zaten pid:mid → outcome haritası; tam düz
+   * kopya (yalnız string değerli girişler). */
   private resetDrafts() {
     const map = this.data?.predictions ?? {}
-    const playerId = this.editorPlayerId
-    const drafts: Record<string, string> = {}
-    const baseline: Record<string, string> = {}
-    for (const [key, outcome] of Object.entries(map)) {
-      const [pid, mid] = key.split(':')
-      if (pid !== playerId) continue
-      drafts[mid] = outcome as string
-      baseline[mid] = outcome as string
+    const flat: Record<string, string> = {}
+    for (const entry of Object.entries(map)) {
+      if (typeof entry[1] === 'string') flat[entry[0]] = entry[1]
     }
-    this.drafts = drafts
-    this.baseline = baseline
-  }
-
-  setEditorPlayer(playerId: string) {
-    this.editorPlayerId = playerId
-    this.resetDrafts()
+    this.baseline = flat
+    this.drafts = { ...flat }
   }
 
   toggleLocked() {
     this.showLocked = !this.showLocked
   }
 
-  setDraft(matchId: string, outcome: string) {
-    this.drafts[matchId] = outcome
+  toggleMatch(matchId: string) {
+    this.openMatchId = this.openMatchId === matchId ? null : matchId
+  }
+
+  togglePlayerFilter(playerId: string) {
+    this.playerFilter = this.playerFilter === playerId ? '' : playerId
+  }
+
+  clearPlayerFilter() {
+    this.playerFilter = ''
+  }
+
+  setDraft(matchId: string, playerId: string, outcome: string) {
+    this.drafts[`${playerId}:${matchId}`] = outcome
+  }
+
+  isDirty(matchId: string, playerId: string): boolean {
+    const key = `${playerId}:${matchId}`
+    return (this.drafts[key] ?? '') !== (this.baseline[key] ?? '')
   }
 
   get editorMatches(): any[] {
@@ -154,6 +157,15 @@ class AdminStore extends Store {
 
   get players(): any[] {
     return this.data?.players ?? []
+  }
+
+  /** Turnuva kodunun uzun adı (payload competitions listesinden). */
+  competitionName(code: string): string {
+    const list: any[] = this.data?.competitions ?? []
+    for (const comp of list) {
+      if (comp.code === code) return comp.name
+    }
+    return code
   }
 
   get openMatchCount(): number {
@@ -177,42 +189,84 @@ class AdminStore extends Store {
     return groupByDay(locked)
   }
 
-  get dirtyItems(): Array<{ matchId: string; outcome: string }> {
-    const items = []
-    for (const matchId of Object.keys(this.drafts)) {
-      if ((this.drafts[matchId] ?? '') !== (this.baseline[matchId] ?? '')) {
-        items.push({ matchId, outcome: this.drafts[matchId] ?? '' })
-      }
-    }
-    for (const matchId of Object.keys(this.baseline)) {
-      if (!(matchId in this.drafts) && this.baseline[matchId] !== '') {
-        items.push({ matchId, outcome: '' })
-      }
-    }
-    // Locked olmayan maçlarda kalan değişiklikler
-    const locked = new Set((this.data?.matches ?? []).filter((m: any) => m.locked).map((m: any) => m.id))
-    return items.filter(i => !locked.has(i.matchId))
+  get activePlayers(): any[] {
+    return this.players.filter(p => p.isActive)
   }
 
-  get dirtyCount(): number {
-    return this.dirtyItems.length
+  get activePlayerCount(): number {
+    return this.activePlayers.length
   }
 
-  async savePredictions() {
-    const items = this.dirtyItems
-    if (items.length === 0) return
-    this.saving = true
+  /** Akordiyon içinde listelenecek oyuncular: aktifler; filtre çipi setse tek oyuncu. */
+  get editorPlayers(): any[] {
+    if (!this.playerFilter) return this.activePlayers
+    return this.activePlayers.filter(p => p.id === this.playerFilter)
+  }
+
+  /** Bir maçın taslak/baseline anahtarları (pid:mid biçiminde). */
+  private matchKeys(matchId: string): Set<string> {
+    const keys = new Set<string>()
+    for (const key of Object.keys(this.drafts)) {
+      if (key.slice(key.indexOf(':') + 1) === matchId) keys.add(key)
+    }
+    for (const key of Object.keys(this.baseline)) {
+      if (key.slice(key.indexOf(':') + 1) === matchId) keys.add(key)
+    }
+    return keys
+  }
+
+  /** Maç için kirli (draft≠baseline) giriş sayısı. */
+  matchDirtyCount(matchId: string): number {
+    let count = 0
+    for (const key of this.matchKeys(matchId)) {
+      if ((this.drafts[key] ?? '') !== (this.baseline[key] ?? '')) count++
+    }
+    return count
+  }
+
+  /** Maça tahmin girmiş AKTİF oyuncu sayısı (akordiyon özeti payı). */
+  matchPredictedCount(matchId: string): number {
+    const map = this.data?.predictions ?? {}
+    let count = 0
+    for (const player of this.activePlayers) {
+      if (map[`${player.id}:${matchId}`]) count++
+    }
+    return count
+  }
+
+  /** #20 U4: tek maçın kirli girişlerini oyuncu başına gruplayıp SIRAYLA
+   * PUT'lar; her başarılı PUT sonrası baseline'ı LOKAL günceller
+   * (bootstrap ÇAĞIRMAZ — 0 ek GET). İlk hatada durur ve toast basar. */
+  async saveMatch(matchId: string) {
+    const byPlayer = new Map<string, Array<{ matchId: string; outcome: string }>>()
+    for (const key of this.matchKeys(matchId)) {
+      const draft = this.drafts[key] ?? ''
+      if (draft === (this.baseline[key] ?? '')) continue
+      const playerId = key.slice(0, key.indexOf(':'))
+      if (!byPlayer.has(playerId)) byPlayer.set(playerId, [])
+      byPlayer.get(playerId).push({ matchId, outcome: draft })
+    }
+    if (byPlayer.size === 0) return
+    this.savingMatchId = matchId
     try {
-      const result = await api('/api/admin/predictions', {
-        method: 'PUT',
-        body: JSON.stringify({ playerId: this.editorPlayerId, items }),
-      })
-      uiStore.toast(`Tahminler kaydedildi (${result.saved} kayıt, ${result.deleted ?? 0} silme).`)
-      await this.bootstrap()
+      let total = 0
+      for (const entry of byPlayer.entries()) {
+        const playerId = entry[0]
+        const items = entry[1]
+        await api('/api/admin/predictions', {
+          method: 'PUT',
+          body: JSON.stringify({ playerId, items }),
+        })
+        for (const item of items) {
+          this.baseline[`${playerId}:${item.matchId}`] = item.outcome
+        }
+        total += items.length
+      }
+      uiStore.toast(`Kaydedildi: ${total} tahmin (${byPlayer.size} oyuncu).`)
     } catch (err: any) {
       uiStore.toast(`Kaydedilemedi: ${err.message}`)
     } finally {
-      this.saving = false
+      this.savingMatchId = null
     }
   }
 
@@ -331,24 +385,6 @@ class AdminStore extends Store {
         body: JSON.stringify({ playerId }),
       })
       uiStore.toast('Profil fotoğrafı kaldırıldı.')
-      await this.bootstrap()
-    } catch (err: any) {
-      uiStore.toast(err.message)
-    }
-  }
-
-  syncScoringForm() {
-    const s = this.data?.scoring
-    if (s) this.scoringForm = { label: s.label, status: s.status, correctOutcome: s.correctOutcome }
-  }
-
-  async saveScoring() {
-    try {
-      await api('/api/admin/scoring', {
-        method: 'PUT',
-        body: JSON.stringify(this.scoringForm),
-      })
-      uiStore.toast('Puanlama güncellendi. Puan tablosu yeniden hesaplandı.')
       await this.bootstrap()
     } catch (err: any) {
       uiStore.toast(err.message)

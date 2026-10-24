@@ -123,7 +123,6 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 | `PUT` | `/api/admin/predictions` | Tahmin kaydet/sil (batch, atomic) |
 | `POST` | `/api/admin/players` | Oyuncu ekle |
 | `PATCH` | `/api/admin/players` | Oyuncu güncelle (ad/renk/aktif) |
-| `PUT` | `/api/admin/scoring` | Puanlama kuralları |
 | `POST` | `/api/admin/sync` | Manuel senkronizasyon |
 
 Yönetim uçları `Authorization: Bearer <ADMIN_PASSWORD>` başlığı ister.

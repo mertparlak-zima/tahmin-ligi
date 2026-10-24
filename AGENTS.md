@@ -71,6 +71,16 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
     ezebilir. Görsel yükler için pattern: `<img>` YOK — URL'i render anında
     prop'tan oku, onAfterRender'da imperatif CSS `background-image` ata
     (bkv. Crest).
+11. **Route sayfasında view anahtarı body `const`'una yazılmaz** (vurulduk,
+    #20 U8): `const det = store.x` + `if (det !== '')` kalıbı reaktif
+    güncellemede BAYAT kapanışla değerlenir → görünüm hiç değişmez (tıklama
+    çalışır, store yazılır, sayfa tepki vermez). Doğrusu: koşulu JSX İÇİNDE
+    doğrudan store okumasıyla çevir (`{store.x === '' ? <A/> : <B/>}`) ve
+    detay içeriğini `playerId={store.x}` binding prop'u alan child
+    component'e taşı (bkv. PlayersPage + PlayerDetail).
+12. **`template()` kökünde ternary YASAK** (vurulduk, #20 U4): `return cond ?
+    <A/> : <B/>` sessizce boş yorum düğümleri üretir (`<!--0-->`, hata yok).
+    Tek kök div + içerde koşullu içerik (bkv. EditorRow akordiyon).
 
 ## Sözleşmeler
 

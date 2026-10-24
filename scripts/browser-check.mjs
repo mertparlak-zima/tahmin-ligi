@@ -246,18 +246,30 @@ if (process.env.BROWSER_CHECK_TEST_ARCHIVE) {
   console.log('  bilgi: arşiv akışı atlandı (BROWSER_CHECK_TEST_ARCHIVE yok — gerçek DB tek sezon)')
 }
 
-await page.locator('.nav-item', { hasText: 'Tahminlerim' }).first().click()
-await page.waitForTimeout(500)
-const identityModal = await page.locator('.identity-grid, .mypage, .empty').count()
-check('tahminlerim sayfası / kimlik', identityModal > 0)
-// Kimlik seçimi (oyuncu varsa)
-const chip = page.locator('.identity-chip').first()
-if (await chip.count() > 0) {
-  await chip.click()
+// --- 5c) Oyuncular (#20 U8): kimlik istemeden açılır; kartlar + detay karne ---
+await page.locator('.nav-item', { hasText: 'Oyuncular' }).first().click()
+await page.waitForTimeout(600)
+check('oyuncular otomatik kimlik istemez', (await page.locator('.identity-grid').count()) === 0)
+const playerCards = await page.locator('.player-card').count()
+check('oyuncu kartları render', playerCards > 0, `${playerCards} kart`)
+await noOverflow('oyuncular')
+if (playerCards > 0) {
+  await page.locator('.player-card').first().click()
+  await page.waitForTimeout(500)
+  check('oyuncu detayı açılır', (await page.locator('.identity-hero').count()) === 1)
+  const detailStats = await page.locator('.stat-card').count()
+  check('detay istatistik kartları', detailStats === 4, `${detailStats} kart`)
+  await page.locator('.players-back').click()
   await page.waitForTimeout(400)
-  check('kimlik seçilince karne görünür', (await page.locator('.identity-hero').count()) === 1)
-  const statCards = await page.locator('.stat-card').count()
-  check('karne istatistik kartları', statCards === 4, `${statCards} kart`)
+  check('geri dönüş kart listesi', (await page.locator('.player-card').count()) === playerCards)
+  // "Bu benim" akışı → SEN vurguları (puan tablosu SEN kontrolü bunu kullanır)
+  await page.locator('.player-card').first().click()
+  await page.waitForTimeout(400)
+  const meBtn = page.locator('.identity-hero .btn', { hasText: 'Bu benim' })
+  if (await meBtn.count() > 0) {
+    await meBtn.click()
+    await page.waitForTimeout(400)
+  }
   // puan tablosunda SEN satırı
   await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
   await page.waitForTimeout(500)
@@ -265,14 +277,12 @@ if (await chip.count() > 0) {
   check('puan tablosunda SEN satırı', youTag === 1)
 }
 
-await page.locator('.nav-item', { hasText: 'Geçmiş' }).first().click()
+await page.locator('.nav-item', { hasText: 'Akış' }).first().click()
 await page.waitForTimeout(500)
-check('geçmiş sayfası', (await page.locator('.results-page, .empty').count()) > 0)
-const dayGroups = await page.locator('.day-group').count()
-if (dayGroups > 0) {
-  const resultItems = await page.locator('.result-item').count()
-  check('geçmiş gün grupları ve sonuçlar', resultItems > 0, `${dayGroups} grup · ${resultItems} sonuç`)
-}
+check('akış sayfası', (await page.locator('.flow-page, .empty').count()) > 0)
+const flowEvents = await page.locator('.flow-event').count()
+check('akış olayları render', flowEvents > 0, `${flowEvents} olay`)
+await noOverflow('akış')
 
 await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
 await page.waitForTimeout(300)
@@ -295,41 +305,85 @@ if (await loginInput.count() > 0) {
   await page.waitForTimeout(2500)
   check('admin girişi başarılı', (await page.locator('.admin-tabs').count()) === 1)
 
-  // tahmin editörü
-  const editorRows = await page.locator('.editor-row').count()
-  check('tahmin editörü satırları', editorRows > 0, `${editorRows} satır`)
+  // tahmin editörü akordiyonu (#20 U4)
+  const accHeads = await page.locator('.acc-head').count()
+  check('tahmin editörü akordiyon başlıkları', accHeads > 0, `${accHeads} başlık`)
   await noOverflow('admin editör')
+  check('eski save-bar kaldırıldı', (await page.locator('.save-bar').count()) === 0)
+  check('eski editor-select kaldırıldı', (await page.locator('.editor-select').count()) === 0)
 
-  // bir select değiştir → dirty bar (önceki koşuda kaydedilen değerden farklı seç)
-  const openSelect = page.locator('.editor-select:not([disabled])').first()
-  if (await openSelect.count() > 0) {
-    const currentVal = await openSelect.inputValue()
-    const nextVal = currentVal === 'H' ? 'D' : 'H'
-    await openSelect.selectOption(nextVal)
-    try {
-      await page.waitForSelector('.save-bar', { timeout: 5000 })
-      check('dirty bar görünür', true)
-    } catch {
-      check('dirty bar görünür', false, 'save-bar görünmedi')
+  const firstHead = page.locator('.acc-head').first()
+  if (await firstHead.count() > 0) {
+    check('başlık kapalıyken aria-expanded=false', (await firstHead.getAttribute('aria-expanded')) === 'false')
+    await firstHead.click()
+    await page.waitForTimeout(400)
+    const predRows = await page.locator('.acc-pred-row').count()
+    check('akordiyon açılınca oyuncu satırları', predRows > 0, `${predRows} satır`)
+    check('başlık açıkken aria-expanded=true', (await firstHead.getAttribute('aria-expanded')) === 'true')
+
+    // ikinci başlığı aç → yalnız 1 akordiyon açık kalır (openMatchId)
+    const secondHead = page.locator('.acc-head').nth(1)
+    if (await secondHead.count() > 0) {
+      await secondHead.click()
+      await page.waitForTimeout(400)
+      check('aynı anda tek akordiyon açık', (await page.locator('.acc-item.open').count()) === 1)
     }
-    // Kaydetme testi yalnız açık izinle (BROWSER_CHECK_ALLOW_SAVE=1) çalışır;
-    // aksi halde gerçek tahmin verisi değiştirilmez (lokal dev:db de gerçek
-    // Supabase'i kullanır!).
-    if (process.env.BROWSER_CHECK_ALLOW_SAVE) {
-      await page.locator('.save-bar .btn').click()
+
+    // oyuncu filtre çipi: açık akordiyon satırları tek oyuncuya iner
+    const chips = page.locator('.acc-chip')
+    if (await chips.count() > 1) {
+      await chips.nth(1).click()
+      await page.waitForTimeout(400)
+      const filteredRows = await page.locator('.acc-item.open .acc-pred-row').count()
+      check('oyuncu filtre çipi tek satır bırakır', filteredRows === 1, `${filteredRows} satır`)
+      await chips.nth(1).click()
+      await page.waitForTimeout(300)
+    } else {
+      console.log('  bilgi: oyuncu çipi yok → filtre testi atlandı')
+    }
+
+    // bir select değiştir → dirty satır + 'Kaydet (N)' aktif
+    const openSelect = page.locator('.acc-item.open .acc-pred-select').first()
+    if (await openSelect.count() > 0) {
+      const currentVal = await openSelect.inputValue()
+      const nextVal = currentVal === 'H' ? 'D' : 'H'
+      await openSelect.selectOption(nextVal)
       try {
-        await page.waitForSelector('.toast', { timeout: 10000 })
-        check('kaydetme toastı', true)
+        await page.waitForSelector('.acc-pred-row.dirty', { timeout: 5000 })
+        check('kirli oyuncu satırı vurgulanır', true)
       } catch {
-        check('kaydetme toastı', false, '10s içinde toast görünmedi')
+        check('kirli oyuncu satırı vurgulanır', false, 'dirty satır görünmedi')
+      }
+      const saveBtn = page.locator('.acc-item.open .acc-save .btn').first()
+      const saveLabel = String((await saveBtn.textContent()) ?? '')
+      check('kaydet düğmesi sayı taşır', /Kaydet \(\d+\)/.test(saveLabel), saveLabel.trim())
+      check('kaydet düğmesi aktif', (await saveBtn.isDisabled()) === false)
+
+      // Kaydetme testi yalnız açık izinle (BROWSER_CHECK_ALLOW_SAVE=1) çalışır;
+      // aksi halde gerçek tahmin verisi değiştirilmez (lokal dev:db de gerçek
+      // Supabase'i kullanır!). Başarı: dirty vurgusu düşer + 'Kaydedildi' + toast.
+      if (process.env.BROWSER_CHECK_ALLOW_SAVE) {
+        await saveBtn.click()
+        try {
+          await page.waitForSelector('.toast', { timeout: 10000 })
+          check('kaydetme toastı', true)
+        } catch {
+          check('kaydetme toastı', false, '10s içinde toast görünmedi')
+        }
+        await page.waitForTimeout(400)
+        check('kayıt sonrası dirty düşer', (await page.locator('.acc-pred-row.dirty').count()) === 0)
+        const savedLabel = String((await page.locator('.acc-item.open .acc-save .btn').first().textContent()) ?? '')
+        check('kayıt sonrası düğme Kaydedildi', savedLabel.includes('Kaydedildi'), savedLabel.trim())
+      } else {
+        console.log('  bilgi: kaydetme testi atlandı (BROWSER_CHECK_ALLOW_SAVE yok — gerçek veri korunur)')
+        await page.reload()
+        await page.waitForTimeout(2500)
       }
     } else {
-      console.log('  bilgi: kaydetme testi atlandı (BROWSER_CHECK_ALLOW_SAVE yok — gerçek veri korunur)')
-      await page.reload()
-      await page.waitForTimeout(2500)
+      check('kirli oyuncu satırı vurgulanır', false, 'açık akordiyonda select yok')
     }
   } else {
-    check('dirty bar görünür', false, 'açık maç select yok')
+    check('akordiyon açılınca oyuncu satırları', false, 'akordiyon başlığı yok')
   }
 
   // oyuncular sekmesi
@@ -382,15 +436,9 @@ if (await loginInput.count() > 0) {
         const removeBtn = page.locator('.player-row button', { hasText: 'Kaldır' }).first()
         if (await removeBtn.count() > 0) {
           await removeBtn.click()
-          let removed = false
-          try {
-            // Kaydet toast'ı hâlâ görünür olabileceğinden metinle bekle.
-            await page.waitForSelector('.toast', { hasText: 'kaldırıldı', timeout: 8000 })
-            removed = true
-          } catch {
-            removed = false
-          }
-          check('avatar kaldırılır', removed && (await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()) === 0)
+          await page.waitForTimeout(1500)
+          const removed = (await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()) === 0
+          check('avatar kaldırılır', removed)
         }
       }
     } else {
@@ -423,6 +471,16 @@ if (await loginInput.count() > 0) {
   }
 } else {
   check('admin girişi başarılı', false, 'login ekranı görünmedi')
+}
+
+// --- 6b) Yönetimden çıkış (#20): header düğmesi oturumu kapatır, tema kalkar ---
+if ((await page.locator('.admin-exit').count()) > 0) {
+  await page.locator('.admin-exit').click()
+  await page.waitForTimeout(500)
+  check('çıkış admin modunu kapatır', (await page.evaluate(() => document.body.classList.contains('admin-mode'))) === false)
+  check('giriş ekranı döner', (await page.locator('.admin-login-card').count()) === 1)
+} else {
+  check('çıkış admin modunu kapatır', false, 'header çıkış düğmesi yok (oturum açık değildi mi?)')
 }
 
 // --- 7) Sayfa hataları (tur sonunda tekrar) ---

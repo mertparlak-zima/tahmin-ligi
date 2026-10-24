@@ -207,6 +207,28 @@ suite.test('summarizeDay: canlı önce, sonra yaklaşan, sonra bitmiş, en son e
   assert.equal(summary.chips[0].compCode, 'CL')
 })
 
+suite.test('chip sonuç renk verisi (#20 eki): kazanan/kaybeden/beraberlik outcome\'u', () => {
+  const home = summarizeDay('2026-10-22', [
+    match('h-win', { kickoff: '2026-10-22T13:00:00Z', status: 'FINISHED', statusGroup: 'finished', isFinished: true, isStarted: true, score: { home: 2, away: 1 } }),
+  ]).chips[0]
+  assert.equal(home.outcome, 'H', 'ev kazanır')
+  assert.equal(home.homeAbbr, 'FB')
+  assert.equal(home.awayAbbr, 'ROM')
+  const away = summarizeDay('2026-10-22', [
+    match('a-win', { kickoff: '2026-10-22T13:00:00Z', status: 'FINISHED', statusGroup: 'finished', isFinished: true, isStarted: true, score: { home: 0, away: 3 } }),
+  ]).chips[0]
+  assert.equal(away.outcome, 'A', 'deplasman kazanır')
+  const draw = summarizeDay('2026-10-22', [
+    match('draw', { kickoff: '2026-10-22T13:00:00Z', status: 'FINISHED', statusGroup: 'finished', isFinished: true, isStarted: true, score: { home: 1, away: 1 } }),
+  ]).chips[0]
+  assert.equal(draw.outcome, 'D', 'beraberlik')
+  const upcoming = summarizeDay('2026-10-22', [
+    match('future', { kickoff: '2026-10-22T19:45:00Z' }),
+  ]).chips[0]
+  assert.equal(upcoming.outcome, null, 'yaklaşan maçta renk yok')
+  assert.equal(upcoming.homeAbbr, 'FB')
+})
+
 suite.test('summarizeDay: aynı gruptakiler gün içinde kronolojik sıralanır', () => {
   const summary = summarizeDay('2026-10-22', [
     match('gec-saat', { kickoff: '2026-10-22T19:45:00Z' }),

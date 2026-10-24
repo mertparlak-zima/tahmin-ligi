@@ -1,48 +1,41 @@
+// Puanlama Kuralı (#20 U6): SALT-OKUNUR — kural DB'den yönetilir
+// (Supabase app_config 'scoring'); UI yalnızca mevcut kuralı ve hesabı açıklar.
 import { Component } from '@geajs/core'
 import adminStore from '../../stores/admin-store'
 
 export default class ScoringTab extends Component {
   template() {
-    const form = adminStore.scoringForm
+    const s = adminStore.data?.scoring
+    if (!s) {
+      return <div class="empty">Puanlama kuralı yüklenemedi.</div>
+    }
     return (
       <div class="admin-scoring">
-        <div class="field">
-          <label class="field-label" for="scoring-label">Etiket</label>
-          <input
-            id="scoring-label"
-            class="input"
-            type="text"
-            maxlength="80"
-            value={form.label}
-            input={e => (adminStore.scoringForm.label = (e.target as HTMLInputElement).value)}
-          />
+        <div class="admin-hint">
+          Puanlama kuralı <b>yalnızca veritabanından</b> yönetilir (Supabase →
+          app_config → <code>scoring</code>). Burada bilgi amaçlı görünür;
+          puanlar her istekte güncel kurala göre yeniden hesaplanır.
         </div>
-        <div class="field">
-          <label class="field-label" for="scoring-status">Durum</label>
-          <select
-            id="scoring-status"
-            class="comp-select"
-            value={form.status}
-            change={e => (adminStore.scoringForm.status = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="provisional" selected={form.status === 'provisional'}>Geçici</option>
-            <option value="final" selected={form.status === 'final'}>Kesinleşti</option>
-          </select>
+        <div class="data-grid" style={{ maxWidth: '480px' } as any}>
+          <div class="data-item">
+            <span class="data-label">Kural</span>
+            <span class="data-value">{s.label}</span>
+          </div>
+          <div class="data-item">
+            <span class="data-label">Doğru sonuç puanı</span>
+            <span class="data-value">{s.correctOutcome} puan</span>
+          </div>
+          <div class="data-item">
+            <span class="data-label">Durum</span>
+            <span class="data-value">{s.status === 'final' ? 'Kesinleşti' : 'Geçici'}</span>
+          </div>
         </div>
-        <div class="field">
-          <label class="field-label" for="scoring-points">Doğru sonuç puanı</label>
-          <input
-            id="scoring-points"
-            class="input narrow"
-            type="number"
-            min="0"
-            max="100"
-            value={form.correctOutcome}
-            input={e => (adminStore.scoringForm.correctOutcome = Number((e.target as HTMLInputElement).value || 0))}
-          />
-          <span class="field-hint">Puanlar her istekte bu kurala göre yeniden hesaplanır.</span>
+        <div class="field-hint" style={{ maxWidth: '480px' } as any}>
+          Hesap: biten her maçta doğru sonuca {s.correctOutcome} puan; sezonluk
+          bonuslar puana eklenir. Eşitlikte önce doğru sayısı, sonra isim
+          sıralaması bozar. Durum "Geçici"yken puan tablosunda oyunculara
+          "(geçici)" notu görünür; sezon sonunda DB'den "final" yapılır.
         </div>
-        <button class="btn primary" click={() => adminStore.saveScoring()}>Kaydet</button>
       </div>
     )
   }

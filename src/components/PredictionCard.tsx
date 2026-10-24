@@ -4,7 +4,7 @@ import uiStore from '../stores/ui-store'
 import { fmtFullDate } from '../utils/format'
 import { cn } from '../utils/cn'
 
-export default function PredictionCard({ match, identityId }: { match: any; identityId: string }) {
+export default function PredictionCard({ match, identityId, own = true }: { match: any; identityId: string; own?: boolean }) {
   const pred = identityId
     ? match.predictions.find((p: any) => p.playerId === identityId)
     : null
@@ -27,7 +27,7 @@ export default function PredictionCard({ match, identityId }: { match: any; iden
         </div>
       </div>
       <div class="pred-card-foot">
-        <span class="pred-card-label">Tahminin: <b>{pred?.label}</b></span>
+        <span class="pred-card-label">{own ? 'Tahminin' : 'Tahmini'}: <b>{pred?.label}</b></span>
         {match.isFinished ? (
           <span class={cn('pred-points', pred?.correct ? 'hit' : 'miss')}>{pred?.points ?? 0} P</span>
         ) : (

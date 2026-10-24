@@ -42,14 +42,16 @@ const matches = [
   },
 ]
 
+// U9: tahmin satırlarına Date.now türevli zaman damgaları tohumlanır —
+// payload boyut ölçümü gerçekçi olsun (bilgi satırı; kapı değil).
 const predictions = [
-  { player_id: 'p1', match_id: 'm1', outcome: 'H' }, // yanlış (A kazandı)
-  { player_id: 'p1', match_id: 'm2', outcome: 'H' }, // doğru → 1 puan
-  { player_id: 'p1', match_id: 'm3', outcome: 'H' }, // gelecek → mühürlü
-  { player_id: 'p2', match_id: 'm1', outcome: 'A' }, // doğru → 1 puan
-  { player_id: 'p2', match_id: 'm2', outcome: 'D' }, // yanlış
-  { player_id: 'p3', match_id: 'm1', outcome: 'A' }, // pasif oyuncu → sayılmamalı
-  { player_id: 'p4', match_id: 'm1', outcome: 'A' }, // doğru → 1 + 2 bonus = 3 puan
+  { player_id: 'p1', match_id: 'm1', outcome: 'H', created_at: iso(now - 50 * hour), updated_at: iso(now - 50 * hour) }, // yanlış (A kazandı)
+  { player_id: 'p1', match_id: 'm2', outcome: 'H', created_at: iso(now - 52 * hour), updated_at: iso(now - 30 * hour) }, // doğru → 1 puan (sonra güncellendi)
+  { player_id: 'p1', match_id: 'm3', outcome: 'H', created_at: iso(now - 20 * hour), updated_at: iso(now - 20 * hour) }, // gelecek → mühürlü
+  { player_id: 'p2', match_id: 'm1', outcome: 'A', created_at: iso(now - 49 * hour), updated_at: iso(now - 49 * hour) }, // doğru → 1 puan
+  { player_id: 'p2', match_id: 'm2', outcome: 'D', created_at: iso(now - 51 * hour), updated_at: iso(now - 12 * hour) }, // yanlış (güncellendi)
+  { player_id: 'p3', match_id: 'm1', outcome: 'A', created_at: iso(now - 48 * hour), updated_at: iso(now - 48 * hour) }, // pasif oyuncu → sayılmamalı
+  { player_id: 'p4', match_id: 'm1', outcome: 'A', created_at: iso(now - 47 * hour), updated_at: iso(now - 47 * hour) }, // doğru → 1 + 2 bonus = 3 puan
 ]
 
 function mockSupabase() {
@@ -104,6 +106,13 @@ assert.equal(future.predictionCount, 1, 'tahmin sayısı herkese açık')
 const sealedPred = future.predictions[0]
 assert.equal(sealedPred.outcome, undefined, 'mühürlü tahminin sonucu sızmamalı')
 assert.equal(sealedPred.name, 'Ogün', 'kimin tahmin yaptığı görünür')
+// U9 (#20 diyet): damga satırda DEĞİL — meta.recentPredictions olaylarında.
+assert.equal(sealedPred.enteredAt, undefined, 'satır damga taşımaz')
+const ev = payload.recentPredictions.find(r => r.matchId === 'm3')
+assert.ok(ev, 'mühürlü maçın girişi akış olaylarında')
+assert.equal(ev.playerId, sealedPred.playerId)
+assert.equal(ev.enteredAt, iso(now - 20 * hour), 'giriş zamanı olayda taşınır')
+assert.equal('outcome' in ev, false, 'olayda outcome YOK')
 
 const past = payload.matches.find(m => m.id === 'm1')
 assert.equal(past.predictionsVisible, true)
@@ -133,6 +142,11 @@ assert.equal(payload.standings[0].rank, 1)
 const m1Pred = past.predictions.find(p => p.playerId === 'p2')
 assert.equal(m1Pred.points, 1)
 assert.equal(m1Pred.label, 'Barcelona yener')
+
+// --- U9: payload boyut bilgisi (kapı DEĞİL; öncesi/sonrası leader karşılaştırır) ---
+const payloadJson = JSON.stringify(payload)
+const predRowCount = payload.matches.reduce((s, m) => s + m.predictions.length, 0)
+console.log(`Payload JSON boyutu: ${payloadJson.length} bayt · ${payload.matches.length} maç · ${predRowCount} tahmin satırı (damgalar Date.now türevli ISO)`)
 
 console.log('Tüm payload/puanlama testleri geçti ✅')
 console.log('Standings:', payload.standings.map(r => `${r.rank}. ${r.name} ${r.points}P (FB${r.teamCorrect.FB} GS${r.teamCorrect.GS} BJK${r.teamCorrect.BJK} TS${r.teamCorrect.TS})`))

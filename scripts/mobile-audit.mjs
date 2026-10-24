@@ -130,22 +130,22 @@ for (const vp of VIEWPORTS) {
   await overflowScan(page, vp.name, 'puan-durumu')
   if (vp.name === '390') await page.screenshot({ path: `${OUT}/03-standings.png` })
 
-  // --- Tahminlerim (+ kimlik seçimi) ---
-  await page.locator('.nav-item', { hasText: 'Tahminlerim' }).first().click()
+  // --- Tahminlerim → Oyuncular (+ detay) ---
+  await page.locator('.nav-item', { hasText: 'Oyuncular' }).first().click()
   await page.waitForTimeout(500)
-  const chip = page.locator('.identity-chip').first()
+  const chip = page.locator('.player-card').first()
   if (await chip.count() > 0) {
     await chip.click()
     await page.waitForTimeout(400)
   }
-  await overflowScan(page, vp.name, 'tahminlerim')
-  if (vp.name === '390') await page.screenshot({ path: `${OUT}/04-mypredictions.png` })
+  await overflowScan(page, vp.name, 'oyuncular')
+  if (vp.name === '390') await page.screenshot({ path: `${OUT}/04-players.png` })
 
-  // --- Geçmiş ---
-  await page.locator('.nav-item', { hasText: 'Geçmiş' }).first().click()
+  // --- Akış ---
+  await page.locator('.nav-item', { hasText: 'Akış' }).first().click()
   await page.waitForTimeout(500)
-  await overflowScan(page, vp.name, 'geçmiş')
-  if (vp.name === '390') await page.screenshot({ path: `${OUT}/05-results.png` })
+  await overflowScan(page, vp.name, 'akış')
+  if (vp.name === '390') await page.screenshot({ path: `${OUT}/05-flow.png` })
 
   // --- Admin ---
   await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' })

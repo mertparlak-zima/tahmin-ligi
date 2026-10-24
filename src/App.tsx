@@ -2,6 +2,7 @@ import { Component, RouterView, Link } from '@geajs/core'
 import { router } from './router'
 import leagueStore from './stores/league-store'
 import uiStore from './stores/ui-store'
+import adminStore from './stores/admin-store'
 import TopBar from './components/TopBar'
 import MainNav from './components/MainNav'
 import MatchSheet from './components/MatchSheet'
@@ -21,6 +22,14 @@ export default class App extends Component {
         uiStore.closeIdentityModal()
       }
     })
+    // Admin modu görsel uyarısı (#20 U3): body sınıfı authed ile senkron.
+    // observe yalnız değişimde tetiklenir → ilk değer (sessionStorage'dan
+    // gelen authed) elle uygulanır; 401→logout yolu sınıfı düşürür.
+    const applyAdminMode = () => {
+      document.body.classList.toggle('admin-mode', adminStore.authed)
+    }
+    applyAdminMode()
+    adminStore.observe('authed', applyAdminMode)
   }
 
   template() {
