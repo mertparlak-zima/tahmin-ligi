@@ -30,10 +30,13 @@ Senkronizasyon cron/thread kullanmaz: `/api/league` isteği geldiğinde son
 başarılı senkronizasyon 90 saniyeden eskiyse ESPN'den taze veri çekilip
 veritabanına yazılır (lazy sync). Paralel ziyaretçiler aynı bayat pencerede
 tek denemeyi paylaşır: son deneme (`last_attempt_at`) 30 saniyeden yeniyse
-tekrar ESPN çekimi yapılmaz (stampede koruması). Site arayüzü 60 sn'de bir
-(canlı maç varken 30 sn'de bir) sessizce yenilenir; maç geceleri veri bu
-sayede kendiliğinden taze kalır. Yönetim panelinde ayrıca manuel senkron
-düğmesi vardır.
+tekrar ESPN çekimi yapılmaz (stampede koruması). Site arayüzü **120 sn'de bir**
+(canlı maç varken 30 sn'de bir; gece 01–08 arası maç yokken 5 dk'da bir)
+sessizce yenilenir; maç geceleri veri bu sayede kendiliğinden taze kalır.
+Dönüş ziyaretlerde ilk ekran `sessionStorage` önbelleğinden **anında** gelir
+ve arka planda tazelenir (stale-while-revalidate); içerik değişmediğinde
+sunucu ETag/If-None-Match ile gövdesiz **304** yanıtı döner. Yönetim panelinde
+ayrıca manuel senkron düğmesi vardır.
 
 ### Sağlamlık kuralları
 

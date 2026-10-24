@@ -21,14 +21,19 @@ class UiStore extends Store {
   constructor() {
     super()
     this.identityId = localStorage.getItem(IDENTITY_KEY) ?? ''
-    leagueStore.observe('data', () => {
+    // Önbellek hidrasyonu (#16) data'yı gözlemciler kurulmadan önce
+    // doldurabiliyor; 304 yolu da data atlamadığı için observe tetiklenmez.
+    // Bu yüzden indeks HEMEN hem de her data değişiminde yeniden kurulur.
+    const rebuildIndex = () => {
       const players: any[] = leagueStore.data?.players ?? []
       this.playerIndex = Object.fromEntries(players.map(p => [p.id, p]))
       if (this.identityId && !this.playerIndex[this.identityId]) {
         this.identityId = ''
         localStorage.removeItem(IDENTITY_KEY)
       }
-    })
+    }
+    rebuildIndex()
+    leagueStore.observe('data', rebuildIndex)
   }
 
   openSheet(matchId: string) {

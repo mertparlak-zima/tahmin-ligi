@@ -13,6 +13,10 @@ import {
 
 export type StatusFilter = 'all' | 'live' | 'upcoming' | 'finished'
 
+/** sessionStorage SWR önbelleği (#16): dönüş ziyarette ilk ekran anında. */
+const CACHE_KEY = 'tahminligi.league.cache.v1'
+const CACHE_MAX_AGE_MS = 12 * 3600_000
+
 class LeagueStore extends Store {
   data: any = null
   loading = false
@@ -20,6 +24,10 @@ class LeagueStore extends Store {
   lastLoadedAt = 0
   /** Art arda başarısız polling sayısı — bağlantı göstergesi için (#18). */
   consecutiveFailures = 0
+  /** Sunucudan gelen ETag — değişmediğinde 304 ile transfer kesilir (#16). */
+  etag = ''
+  /** İlk tazeleme bekleniyor (önbellekten hidratlandı) — bant baskılanır (#16). */
+  hydratedFromCache = false
   /** Seçili arşiv sezonu (#18 PR2): 0 = aktif sezon. */
   selectedSeason = 0
   archiveLoading = false
@@ -39,18 +47,63 @@ class LeagueStore extends Store {
   private seq = 0
   private pollTimer: any = null
 
+  constructor() {
+    super()
+    this.hydrateFromCache()
+  }
+
+  /** sessionStorage'dan stale-while-revalidate hidrasyonu (#16). */
+  private hydrateFromCache() {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      const payload = parsed?.payload
+      if (!payload?.meta?.season || !Array.isArray(payload?.matches)) return
+      if (Date.now() - (parsed.savedAt ?? 0) > CACHE_MAX_AGE_MS) return
+      this.data = payload
+      this.etag = typeof parsed.etag === 'string' ? parsed.etag : ''
+      this.hydratedFromCache = true
+    } catch {
+      // Bozuk/kota dolu önbellek — sessizce yoksay.
+    }
+  }
+
+  private saveCache(payload: any) {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), etag: this.etag, payload }))
+    } catch {
+      // Kota/private mod — önbellek yazılamadı, sorun değil.
+    }
+  }
+
   async load(silent = false) {
     if (!silent) this.loading = true
     const seq = ++this.seq
     try {
-      const res = await fetch('/api/league', { cache: 'no-store' })
+      const res = await fetch('/api/league', {
+        cache: 'no-store',
+        ...(this.etag ? { headers: { 'if-none-match': this.etag } } : {}),
+      })
+      if (res.status === 304) {
+        // İçerik değişmedi (#16): veri elde, yalnız tazelik damgası güncellenir.
+        if (seq !== this.seq) return
+        this.error = null
+        this.consecutiveFailures = 0
+        this.hydratedFromCache = false
+        this.lastLoadedAt = Date.now()
+        return
+      }
       if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
       const payload = await res.json()
       if (seq !== this.seq) return
       this.data = payload
       this.error = null
       this.consecutiveFailures = 0
+      this.hydratedFromCache = false
       this.lastLoadedAt = Date.now()
+      this.etag = res.headers.get('etag') ?? ''
+      this.saveCache(payload)
       this.ensureSelectedDate()
     } catch (err: any) {
       if (seq !== this.seq) return
@@ -78,14 +131,23 @@ class LeagueStore extends Store {
     this.selectedDate = future ? future.key : dates[dates.length - 1].key
   }
 
+  /** Akıllı polling aralığı (#16): canlı 30 sn; gece (01-08 İstanbul) ve maç
+   *  yokken 5 dk; aksi halde 2 dk. Sekme gizliyken istek atılmaz (mevcut davranış). */
+  private pollDelayMs(): number {
+    if (this.hasLive) return 30_000
+    const hour = Number(
+      new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: 'numeric', hour12: false }).format(new Date())
+    )
+    const quietNight = hour >= 1 && hour < 8
+    return quietNight ? 300_000 : 120_000
+  }
+
   private schedulePoll() {
     if (this.pollTimer) clearTimeout(this.pollTimer)
-    const hasLive = (this.data?.matches ?? []).some((m: any) => m.isLive)
-    const delay = hasLive ? 30_000 : 60_000
     this.pollTimer = setTimeout(() => {
       if (document.visibilityState === 'visible') this.load(true)
       else this.schedulePoll()
-    }, delay)
+    }, this.pollDelayMs())
   }
 
   refresh() {
@@ -203,7 +265,7 @@ class LeagueStore extends Store {
   }
 
   onVisibilityGained() {
-    if (Date.now() - this.lastLoadedAt > 45_000) this.load(true)
+    if (Date.now() - this.lastLoadedAt > this.pollDelayMs() / 2) this.load(true)
   }
 
   // --- Hesaplanmış görünüm verileri ---
@@ -337,6 +399,9 @@ class LeagueStore extends Store {
    */
   get staleInfo(): { level: 'none' | 'stale' | 'offline'; sinceIso: string | null } {
     if (!this.data) return { level: 'none', sinceIso: null }
+    // Önbellekten hidratlandı ve ilk tazeleme bekleniyor (#16): bant henüz
+    // anlamsız — veri arkadan geliyor, "alınamıyor" demek yanlış olur.
+    if (this.hydratedFromCache) return { level: 'none', sinceIso: null }
     if (this.consecutiveFailures >= 2) {
       return { level: 'offline', sinceIso: this.data.meta?.generatedAt ?? null }
     }

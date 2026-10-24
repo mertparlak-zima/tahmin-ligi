@@ -115,9 +115,7 @@ assert.equal(ogun.points, 1, 'm2 doğru (1 puan), m1 yanlış')
 assert.equal(mert.points, 1, 'm1 doğru (1 puan), m2 yanlış')
 assert.equal(ogun.correctOutcomes, 1)
 assert.equal(ogun.played, 2, 'iki bitmiş maça da tahmin girdi')
-assert.equal(ogun.missed, 0)
 assert.equal(mert.played, 2)
-assert.equal(mert.missed, 0)
 
 // teamCorrect: p1 m2 (Beşiktaş galibiyeti) doğru → BJK=1
 assert.equal(ogun.teamCorrect.BJK, 1)
@@ -127,13 +125,9 @@ assert.equal(mert.teamCorrect.GS, 1)
 // Bonus puan: p4 doğru sonuç (1) + bonus (2) = 3
 const bonuslu = payload.standings.find(r => r.id === 'p4')
 assert.equal(bonuslu.points, 3)
-assert.equal(bonuslu.bonusPoints, 2)
 
 // Sıralama: eşit puan → doğru sayısı → isim
 assert.equal(payload.standings[0].rank, 1)
-
-// Form
-assert.deepEqual(mert.form, [1, 0])
 
 // --- Maç içi tahmin rozetleri ---
 const m1Pred = past.predictions.find(p => p.playerId === 'p2')

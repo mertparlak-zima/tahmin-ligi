@@ -61,6 +61,36 @@ const calChips = await page.locator('.cal-chip').count()
 check('fikstür chipleri render', calChips > 0, `${calChips} chip`)
 await noOverflow('maçlar')
 
+// --- 1c) Önbellek hidrasyonu + ETag (#16) ---
+// API bloklanınca sayfa sessionStorage önbelleğinden anında render etmeli
+// (stale-while-revalidate); API açılınca manuel yenileme tazeler.
+await page.route('**/api/league', route => route.abort())
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1500)
+const cachedChips = await page.locator('.cal-chip').count()
+check('önbellekten anında render (api bloklu)', cachedChips > 0, `${cachedChips} chip`)
+check('hidrasyon sırasında bant yok', (await page.locator('.stale-band.open').count()) === 0)
+await page.unroute('**/api/league')
+await page.locator('.icon-btn[aria-label="Yenile"]').click()
+let refreshed = false
+try {
+  await page.waitForSelector('.toast', { timeout: 8000 })
+  refreshed = true
+} catch {
+  refreshed = false
+}
+check('api açılınca yenileme çalışır', refreshed)
+const etagTest = process.env.BROWSER_CHECK_TEST_STALE
+  ? { ok: true, why: 'fake-stale yanıtları etag taşımaz → atlandı' }
+  : await page.evaluate(async () => {
+      const r1 = await fetch('/api/league', { cache: 'no-store' })
+      const etag = r1.headers.get('etag')
+      if (!etag) return { ok: false, why: 'yanıtta etag başlığı yok' }
+      const r2 = await fetch('/api/league', { cache: 'no-store', headers: { 'if-none-match': etag } })
+      return { ok: r2.status === 304, why: `ikinci istek ${r2.status} döndü` }
+    })
+check('ETag/If-None-Match 304', etagTest.ok, etagTest.why)
+
 // Maçlı bir gün seç (bugün maç olmayabilir)
 const dayWithMatches = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
 if (await dayWithMatches.count() > 0) await dayWithMatches.click()

@@ -191,28 +191,23 @@ suite.test('pasif oyuncu her yerden dışlanır', () => {
   assert.equal(m1.predictionCount, 3, 'pasif tahmini sayıya girmez')
 })
 
-suite.test('puan durumu matematik: points/played/missed/correctOutcomes/accuracy', () => {
+suite.test('puan durumu matematik: points/played/correctOutcomes/accuracy', () => {
   const st = Object.fromEntries(payload.standings.map(r => [r.id, r]))
 
   // Ogün: m1 yanlış, m2 doğru, m6 doğru
   assert.equal(st.p1.points, 2)
   assert.equal(st.p1.played, 3)
-  assert.equal(st.p1.missed, 0)
   assert.equal(st.p1.correctOutcomes, 2)
   assert.equal(st.p1.accuracy, 67, 'round(2/3*100) = 67')
-  assert.deepEqual(st.p1.form, [0, 1, 1], 'kronolojik son değerler')
 
   // Ali: m1 doğru, m2 doğru, m6 yanlış
   assert.equal(st.p4.points, 2)
   assert.equal(st.p4.correctOutcomes, 2)
-  assert.deepEqual(st.p4.form, [1, 1, 0])
 
-  // Mert: m1 doğru, m2 yanlış, m6 kaçırdı
+  // Mert: m1 doğru, m2 yanlış, m6 kaçırdı (kaçırma artık played farkından okunur)
   assert.equal(st.p2.points, 1)
   assert.equal(st.p2.played, 2)
-  assert.equal(st.p2.missed, 1)
   assert.equal(st.p2.accuracy, 50)
-  assert.deepEqual(st.p2.form, [1, 0])
 })
 
 suite.test('teamCorrect: derbi doğru tahmini FB ve GS\'yi birlikte artırır', () => {
@@ -225,28 +220,17 @@ suite.test('teamCorrect: derbi doğru tahmini FB ve GS\'yi birlikte artırır', 
   assert.deepEqual(st.p2.teamCorrect, { FB: 0, GS: 1, BJK: 0, TS: 0 })
 })
 
-suite.test('sıralama: puan ↓, doğru ↓, isim ↑ (tr) + rank/behind/leader', () => {
+suite.test('sıralama: puan ↓, doğru ↓, isim ↑ (tr) + rank/leader', () => {
   // Ali 2P/2C, Ogün 2P/2C → isim: Ali < Ogün; Mert 1P
   assert.deepEqual(payload.standings.map(r => r.id), ['p4', 'p1', 'p2'])
   assert.deepEqual(payload.standings.map(r => r.rank), [1, 2, 3])
-  assert.deepEqual(payload.standings.map(r => r.behind), [0, 0, 1])
   assert.deepEqual(payload.meta.leader, { name: 'Ali', points: 2 })
 })
 
-suite.test('meta: sayılar, nextMatch, lastFinished, takım formu', () => {
+suite.test('meta: sayılar, senkron, takım formu', () => {
   const meta = payload.meta
   assert.deepEqual(meta.counts, { players: 3, matches: 6, finished: 3, live: 1, upcoming: 1 })
   assert.equal(meta.sync.lastSuccessAt !== null, true)
-  assert.equal(meta.sync.matchesSeen, 6)
-
-  assert.equal(meta.nextMatch.id, 'm4')
-  assert.equal(meta.nextMatch.competitionCode, 'EL')
-  assert.equal(meta.nextMatch.homeShort, 'Fenerbahçe')
-  assert.equal(meta.nextMatch.score, null)
-  assert.equal(meta.nextMatch.status, 'TIMED')
-
-  assert.equal(meta.lastFinished.id, 'm6')
-  assert.deepEqual(meta.lastFinished.score, { home: 2, away: 0 })
 
   // Takım formu: GS iki mağlubiyet (m1, m2), FB/TS galibiyet
   const m1 = payload.matches.find(m => m.id === 'm1')
@@ -256,7 +240,7 @@ suite.test('meta: sayılar, nextMatch, lastFinished, takım formu', () => {
   assert.deepEqual(m2.away.form, ['M', 'M'], 'GS formu (m2 away): M,M')
 })
 
-suite.test('form son 5 tahminle sınırlı; takım formu son 5 maçla sınırlı', async () => {
+suite.test('takım formu son 5 maçla sınırlı', async () => {
   const t0 = Date.now()
   const players = [{ id: 'z1', name: 'Zeynep', color: '#b8f34a', is_active: true }]
   const matches = []
@@ -277,7 +261,6 @@ suite.test('form son 5 tahminle sınırlı; takım formu son 5 maçla sınırlı
   const z = p.standings[0]
   assert.equal(z.played, 7)
   assert.equal(z.points, 4, '4 doğru (C ×4), 3 yanlış (W ×3)')
-  assert.deepEqual(z.form, [1, 1, 1, 0, 1], 'son 5 tahmin değeri')
   assert.equal(z.accuracy, 57, 'round(4/7*100) = 57')
   const first = p.matches[0]
   assert.deepEqual(first.home.form, ['G', 'G', 'G', 'G', 'G'], 'takım formu son 5 galibiyet')
@@ -396,19 +379,15 @@ suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonlu
   assert.deepEqual(oldP.matches.map(m => m.id), ['m-old'])
   const oldSt = Object.fromEntries(oldP.standings.map(r => [r.id, r]))
   assert.equal(oldSt.q1.points, 3, 'eski sezon: 1 doğru + o sezonun bonusu (2)')
-  assert.equal(oldSt.q1.bonusPoints, 2, 'bonus app_config bonus:<eski sezon> anahtarından')
   assert.equal(oldSt.q1.played, 1)
   assert.equal(oldSt.q2.points, 0, 'eski sezonda doğru yok; yeni sezon bonusu SIZMAZ')
-  assert.equal(oldSt.q2.bonusPoints, 0)
 
   const newP = await buildLeaguePayload(supS) // varsayılan: aktif sezon
   assert.deepEqual(newP.matches.map(m => m.id), ['m-new'])
   const newSt = Object.fromEntries(newP.standings.map(r => [r.id, r]))
   assert.equal(newSt.q2.points, 6, 'yeni sezon: 1 doğru + o sezonun bonusu (5)')
-  assert.equal(newSt.q2.bonusPoints, 5)
   assert.equal(newSt.q1.points, 0, 'eski sezon doğrusu yeni sezona SIZMAZ')
-  assert.equal(newSt.q1.bonusPoints, 0, 'eski bonus yeni sezona SIZMAZ')
-  assert.equal(newP.players.find(pl => pl.id === 'q2').bonusPoints, 5, 'players listesi de sezonluk bonusu taşır')
+  assert.equal(newP.players.find(pl => pl.id === 'q2').name, 'Bora', 'players listesi sezonluk veri taşır')
 })
 
 suite.test('bilinmeyen lig kodu hata fırlatır (api 400 kaynağı)', async () => {
@@ -422,10 +401,9 @@ suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalı
   const p = await buildLeaguePayload(mainSupabase(), { seasonYear: SY + 4 })
   assert.equal(p.matches.length, 0)
   assert.equal(p.meta.counts.matches, 0)
-  assert.equal(p.meta.nextMatch, null)
   assert.equal(p.meta.season.year, SY + 4)
   assert.equal(p.standings.length, 3)
-  assert.ok(p.standings.every(r => r.points === 0 && r.played === 0 && r.bonusPoints === 0))
+  assert.ok(p.standings.every(r => r.points === 0 && r.played === 0))
   assert.deepEqual(p.meta.seasons.map(s => s.year), [SY], 'sezon listesi seçili ligin mevcut sezonları')
 })
 

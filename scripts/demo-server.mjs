@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto'
 
 import { maybeSync } from '../lib/sync.js'
 import { buildLeaguePayload } from '../lib/league.js'
+import { GET as leagueGET } from '../api/league.js'
 import * as admin from '../api/admin.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -222,36 +223,43 @@ async function handleApi(request) {
   const method = request.method
 
   if (method === 'GET' && pathname === '/api/league') {
+    // Gerçek uç kodu (#16): api/league.js GET — ETag/304 + ?season/?league
+    // doğrulaması dahil. Senkron kuyruğu korunur (admin senkronuyla serileşir).
     const started = Date.now()
     syncing = (syncing ?? Promise.resolve())
       .then(() => maybeSync(supabase))
       .catch(() => {})
     await syncing
-    // ?season= → gerçek buildLeaguePayload sezon filtresi (#18 PR2).
-    const seasonParam = new URL(request.url, `http://localhost:${PORT}`).searchParams.get('season')
-    const season = seasonParam && /^\d{4}$/.test(seasonParam) ? Number(seasonParam) : null
-    const payload = await buildLeaguePayload(supabase, season ? { seasonYear: season } : undefined)
-    if (process.env.DEV_FAKE_STALE) {
-      // Deterministik bayatlık senaryosu (browser-check için): bant + SON BİLGİ
-      // etiketlerini her koşulda tetikler; yalnız demo sunucuda çalışır.
-      const nowIso = new Date().toISOString()
-      payload.meta.sync = {
-        lastAttemptAt: nowIso,
-        lastSuccessAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
-        lastError: 'demo: kaynak zaman aşımı (DEV_FAKE_STALE)',
-        matchesSeen: payload.meta.sync?.matchesSeen ?? 0,
-        lastSuccessAgeMinutes: 240,
-      }
-      const target = payload.matches.find(m => !m.isFinished) ?? payload.matches[0]
-      if (target) {
-        target.isLive = true
-        target.isStarted = true
-        target.statusGroup = 'live'
-        target.minute = 67
-        target.predictionsVisible = true
-      }
+    const webReq = new Request(`http://localhost:${PORT}${request.url}`, {
+      method: 'GET',
+      headers: request.headers,
+    })
+    webReq.supabase = supabase
+    const res = await leagueGET(webReq)
+    if (!process.env.DEV_FAKE_STALE || res.status !== 200) {
+      console.log(`GET /api/league → ${res.status} (${Date.now() - started} ms)`)
+      return res
     }
-    console.log(`GET /api/league → ${payload.meta.counts.matches} maç (${Date.now() - started} ms)`)
+    // Deterministik bayatlık senaryosu (browser-check için): bant + SON BİLGİ
+    // etiketlerini her koşulda tetikler; yalnız demo sunucuda çalışır.
+    const payload = await res.json()
+    const nowIso = new Date().toISOString()
+    payload.meta.sync = {
+      lastAttemptAt: nowIso,
+      lastSuccessAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
+      lastError: 'demo: kaynak zaman aşımı (DEV_FAKE_STALE)',
+      matchesSeen: payload.meta.sync?.matchesSeen ?? 0,
+      lastSuccessAgeMinutes: 240,
+    }
+    const target = payload.matches.find(m => !m.isFinished) ?? payload.matches[0]
+    if (target) {
+      target.isLive = true
+      target.isStarted = true
+      target.statusGroup = 'live'
+      target.minute = 67
+      target.predictionsVisible = true
+    }
+    console.log(`GET /api/league → 200 fake-stale (${Date.now() - started} ms)`)
     return new Response(JSON.stringify(payload), {
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     })
