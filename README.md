@@ -28,9 +28,12 @@ Maç sonuçları otomatik güncellenir, puan tablosu kendiliğinden hesaplanır.
 
 Senkronizasyon cron/thread kullanmaz: `/api/league` isteği geldiğinde son
 başarılı senkronizasyon 90 saniyeden eskiyse ESPN'den taze veri çekilip
-veritabanına yazılır (lazy sync). Site arayüzü 60 sn'de bir (canlı maç varken
-30 sn'de bir) sessizce yenilenir; maç geceleri veri bu sayede kendiliğinden
-taze kalır. Yönetim panelinde ayrıca manuel senkron düğmesi vardır.
+veritabanına yazılır (lazy sync). Paralel ziyaretçiler aynı bayat pencerede
+tek denemeyi paylaşır: son deneme (`last_attempt_at`) 30 saniyeden yeniyse
+tekrar ESPN çekimi yapılmaz (stampede koruması). Site arayüzü 60 sn'de bir
+(canlı maç varken 30 sn'de bir) sessizce yenilenir; maç geceleri veri bu
+sayede kendiliğinden taze kalır. Yönetim panelinde ayrıca manuel senkron
+düğmesi vardır.
 
 ### Sağlamlık kuralları
 
@@ -99,7 +102,8 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 - **Site**: tarih şeridinden gün seç, maç kartına dokun → alt sheet'te tahminler
   ve puanlar. "Tahminlerim" sekmesi için bir kez "Kimsin?" seçimi yapılır
   (cihazda saklanır) — kişisel karneni görürsün.
-- **Yönetim** (`/admin`, footer'daki link): şifre ile giriş.
+- **Yönetim** (`/admin`): topbar'daki kilit düğmesinden (oturum açıksa "Panel")
+  veya footer'daki linkten; şifre ile giriş.
   - *Tahminler*: oyuncu seç, günlere gruplu maçlarda sonuç seç; kaydetme çubuğu
     yalnız değişen satırları gönderir. Kilitli maçlar gri.
   - *Oyuncular*: ekle / pasifleştir (pasif oyuncu listeden düşer, verisi kalır).

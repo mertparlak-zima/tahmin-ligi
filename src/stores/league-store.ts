@@ -97,6 +97,19 @@ class LeagueStore extends Store {
     return matches.filter(m => dateKey(m.kickoff) === this.selectedDate)
   }
 
+  /** Gün anahtarı → o günün maçları (saat sırasına göre). Önizleme popover'ı için. */
+  get matchesByDay(): Record<string, any[]> {
+    const byDay: Record<string, any[]> = {}
+    for (const m of this.data?.matches ?? []) {
+      const key = dateKey(m.kickoff)
+      ;(byDay[key] ??= []).push(m)
+    }
+    for (const key of Object.keys(byDay)) {
+      byDay[key].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+    }
+    return byDay
+  }
+
   get filteredMatches(): any[] {
     let list = this.matchesOfSelectedDate
     if (this.statusFilter !== 'all') {

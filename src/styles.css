@@ -24,6 +24,7 @@
   --radius-lg: 20px;
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
   --dock-height: 68px;
+  --content-max: 1280px;
 }
 
 * {
@@ -73,8 +74,13 @@ a {
 
 /* ---------- Uygulama iskeleti ---------- */
 
+.app-root {
+  min-height: 100vh;
+}
+
+/* İçerik ölçülü genişlikte: tam genişlik yerine okunaklı satır yoğunluğu. */
 .app {
-  max-width: none;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -95,7 +101,6 @@ a {
   position: sticky;
   top: 0;
   z-index: 40;
-  margin: 0 -20px;
   padding: 10px 20px;
   background: rgba(6, 16, 29, 0.82);
   backdrop-filter: blur(22px) saturate(130%);
@@ -107,6 +112,8 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  max-width: var(--content-max);
+  margin: 0 auto;
 }
 
 .brand {
@@ -204,6 +211,28 @@ a {
   border-color: var(--line-strong);
 }
 
+/* Topbar yönetim erişimi: kilit ikonu; oturum varsa "Panel" etiketi. */
+.admin-link {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-link-label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-link.authed {
+  color: var(--accent);
+  border-color: rgba(184, 243, 74, 0.45);
+  background: rgba(184, 243, 74, 0.08);
+}
+
 .icon-btn.spinning svg {
   animation: spin 0.9s linear infinite;
 }
@@ -285,7 +314,7 @@ a {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 4px 2px 10px;
+  padding: 4px 2px 8px;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
@@ -375,6 +404,67 @@ a {
   border: 1px solid var(--line-strong);
 }
 
+/* ---------- Tarih önizleme popover'ı ---------- */
+
+.date-preview-popover {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(16, 34, 56, 0.97);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(calc(-100% - 8px)) translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s;
+}
+
+.date-preview-popover.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(calc(-100% - 8px));
+}
+
+.date-preview-popover.below {
+  transform: translateY(8px);
+}
+
+.date-preview-popover.below.open {
+  transform: none;
+}
+
+.date-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.date-preview-time {
+  font-size: 12px;
+  font-weight: 850;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.date-preview-teams {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-preview-row .comp-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* ---------- Filtreler ---------- */
 
 .filter-bar {
@@ -383,7 +473,7 @@ a {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin: 2px 0 14px;
 }
 
 .segmented {
@@ -424,7 +514,7 @@ a {
 }
 
 .comp-select {
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-radius: 11px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -441,7 +531,7 @@ a {
 /* ---------- Turnuva grupları ve maç kartları ---------- */
 
 .comp-group {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .comp-group-head {
@@ -729,6 +819,14 @@ a {
   background: linear-gradient(100deg, var(--surface) 40%, var(--surface-2) 50%, var(--surface) 60%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease infinite;
+}
+
+.skeleton-card.stat {
+  height: 88px;
+}
+
+.skeleton-card.table {
+  height: 320px;
 }
 
 @keyframes shimmer {

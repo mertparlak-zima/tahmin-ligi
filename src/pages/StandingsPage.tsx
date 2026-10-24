@@ -1,10 +1,32 @@
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
+import SkeletonCard from '../components/SkeletonCard'
 import Podium from '../components/Podium'
 import StandingsTable from '../components/StandingsTable'
 
 export default class StandingsPage extends Component {
   template() {
+    if (leagueStore.loadingInitial) {
+      return (
+        <div class="page-skeleton">
+          <div class="stat-cards">
+            {[0, 1, 2, 3].map(i => <SkeletonCard key={i} shape="stat" />)}
+          </div>
+          <SkeletonCard shape="table" />
+        </div>
+      )
+    }
+
+    if (leagueStore.error && !leagueStore.data) {
+      return (
+        <div class="error-state">
+          <div class="error-title">Veriler yüklenemedi</div>
+          <div class="error-sub">{leagueStore.error}</div>
+          <button class="btn primary" click={() => leagueStore.refresh()}>Tekrar dene</button>
+        </div>
+      )
+    }
+
     const meta = leagueStore.data?.meta
     const standings = leagueStore.standings
     const counts = meta?.counts

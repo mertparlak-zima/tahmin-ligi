@@ -11,6 +11,8 @@ class UiStore extends Store {
   identityModalOpen = false
   toasts: Array<{ id: number; message: string }> = []
   identityId = ''
+  datePreviewKey = ''
+  datePreviewRect: { left: number; top: number; bottom: number; width: number } | null = null
 
   private toastSeq = 0
 
@@ -45,6 +47,16 @@ class UiStore extends Store {
 
   closeIdentityModal() {
     this.identityModalOpen = false
+  }
+
+  /** Tarih chip önizlemesi: hover'daki günün maçları (yalnız masaüstü hover). */
+  openDatePreview(key: string, rect: { left: number; top: number; bottom: number; width: number }) {
+    this.datePreviewKey = key
+    this.datePreviewRect = rect
+  }
+
+  closeDatePreview() {
+    this.datePreviewKey = ''
   }
 
   setIdentity(playerId: string) {

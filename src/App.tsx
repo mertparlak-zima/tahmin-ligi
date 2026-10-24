@@ -6,6 +6,7 @@ import TopBar from './components/TopBar'
 import MainNav from './components/MainNav'
 import MatchSheet from './components/MatchSheet'
 import IdentityModal from './components/IdentityModal'
+import DatePreviewPopover from './components/DatePreviewPopover'
 import Toasts from './components/Toasts'
 
 export default class App extends Component {
@@ -24,20 +25,23 @@ export default class App extends Component {
 
   template() {
     return (
-      <div class="app">
+      <div class="app-root">
         <TopBar />
-        <MainNav />
-        <main class="page">
-          <RouterView router={router} />
-        </main>
-        <footer class="footer">
-          <span>{leagueStore.data?.meta?.leagueName ?? 'Tahmin Ligi'} · arkadaşlar arası tahmin ligi</span>
-          <span class="footer-right">Veri: ESPN</span>
-          <Link to="/admin" class="footer-admin">Yönetim</Link>
-        </footer>
-        <MatchSheet />
-        <IdentityModal />
-        <Toasts />
+        <div class="app">
+          <MainNav />
+          <main class="page">
+            <RouterView router={router} />
+          </main>
+          <footer class="footer">
+            <span>{leagueStore.data?.meta?.leagueName ?? 'Tahmin Ligi'} · arkadaşlar arası tahmin ligi</span>
+            <span class="footer-right">Veri: ESPN</span>
+            <Link to="/admin" class="footer-admin">Yönetim</Link>
+          </footer>
+          <MatchSheet />
+          <IdentityModal />
+          <Toasts />
+        </div>
+        <DatePreviewPopover />
       </div>
     )
   }

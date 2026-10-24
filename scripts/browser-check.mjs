@@ -51,6 +51,37 @@ await page.waitForTimeout(300)
 const selectedCount = await page.locator('.date-chip.selected').count()
 check('tarih seçimi aktif sınıf alır', selectedCount === 1)
 
+// --- 2b) Tarih chip hover önizlemesi (yalnız gerçek hover cihazlarında) ---
+const hoverCapable = await page.evaluate(() => window.matchMedia('(hover: hover) and (pointer: fine)').matches)
+if (hoverCapable) {
+  const chipWithMatches2 = page.locator('.date-chip').filter({ has: page.locator('.date-count, .date-live-dot') }).first()
+  if (await chipWithMatches2.count() > 0) {
+    // İşaretçi zaten chip üzerinde olabilir (önceki tıklamalar) — mouseover
+    // tetiklenmesi için önce kesin boş bir noktaya çek.
+    await page.mouse.move(8, 600)
+    await page.waitForTimeout(120)
+    await chipWithMatches2.hover()
+    await page.waitForTimeout(350)
+    const popoverOpen = await page.locator('.date-preview-popover.open').count()
+    check('tarih chip önizlemesi açılır', popoverOpen === 1)
+    if (popoverOpen === 1) {
+      const previewRows = await page.locator('.date-preview-row').count()
+      check('önizlemede maç satırı var', previewRows > 0, `${previewRows} satır`)
+    }
+    await page.mouse.move(8, 600)
+    await page.waitForTimeout(350)
+    check('önizleme pointer çekilince kapanır', (await page.locator('.date-preview-popover.open').count()) === 0)
+  } else {
+    console.log('  bilgi: maçlı chip yok → önizleme testi atlandı')
+  }
+} else {
+  console.log('  bilgi: hover desteklenmiyor → önizleme testi atlandı')
+}
+
+// --- 2c) Topbar yönetim erişimi ---
+const adminLinkCount = await page.locator('.topbar-actions .admin-link').count()
+check('topbar yönetim düğmesi', adminLinkCount === 1)
+
 // --- 3) Filtre segmenti (bilgi amaçlı; hata vermemeli) ---
 await page.locator('.seg-item', { hasText: 'Bitti' }).first().click()
 await page.waitForTimeout(300)

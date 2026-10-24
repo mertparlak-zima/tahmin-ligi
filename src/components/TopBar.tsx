@@ -1,4 +1,6 @@
+import { Link } from '@geajs/core'
 import leagueStore from '../stores/league-store'
+import adminStore from '../stores/admin-store'
 import uiStore from '../stores/ui-store'
 import { cn } from '../utils/cn'
 
@@ -22,6 +24,20 @@ export default function TopBar() {
               <span class="live-dot"></span>Canlı
             </span>
           ) : null}
+          <Link
+            to="/admin"
+            class={cn('icon-btn admin-link', adminStore.authed && 'authed')}
+            aria-label="Yönetim paneli"
+          >
+            {adminStore.authed ? (
+              <span class="admin-link-label">Panel</span>
+            ) : (
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3a4 4 0 0 0-4 4v2H7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1V7a4 4 0 0 0-4-4z" />
+                <circle cx="12" cy="14" r="1.4" fill="currentColor" stroke="none" />
+              </svg>
+            )}
+          </Link>
           <button
             class={cn('icon-btn', leagueStore.loading && 'spinning')}
             aria-label="Yenile"
