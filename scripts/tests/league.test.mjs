@@ -1,12 +1,16 @@
 // C · lib/league.js testleri — mühür kuralları, puan durumu, meta, admin payload.
 
 import assert from 'node:assert/strict'
-import { buildAdminPayload, buildLeaguePayload } from '../../lib/league.js'
+import { buildAdminPayload, buildLeaguePayload, seasonLabel } from '../../lib/league.js'
+import { seasonYear } from '../../lib/espn.js'
+import { GET as leagueGET } from '../../api/league.js'
 import { createMemorySupabase, createSuite, hour, iso, runIfMain } from './helpers.mjs'
 
 const suite = createSuite('C · lib/league.js')
 
 const now = Date.now()
+const SY = seasonYear(new Date(now))
+const labelOf = y => seasonLabel(y)
 
 // --- Ana senaryo ---
 // m1 GS 1-4 BAR (bitti, A kazandı)      -96h
@@ -21,6 +25,10 @@ const row = o => ({
   minute: null,
   home_tla: null, away_tla: null, home_crest: null, away_crest: null,
   matchday: 1, stage: null,
+  // Dondurulmuş flag'ler (P5): tohumlar aktif (lig, sezon) kapsamındadır;
+  // istisnai testler ...o ile override eder.
+  league: 'EU',
+  season_year: SY,
   ...o,
 })
 
@@ -313,6 +321,132 @@ suite.test('buildAdminPayload: kilit bayrakları + "pid:mid" tahmin haritası', 
   assert.equal(p3.isActive, false, 'pasif oyuncu admin listesinde işaretli')
   assert.deepEqual(admin.scoring, { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 })
   assert.equal(admin.sync.id, 1)
+})
+
+// --- Sezon/lig meta + izolasyon (v6 P5/P6/P2-bonus) ---
+
+suite.test('meta.season/seasons/leagues: seçili ligin sezonları desc sıralanır', async () => {
+  const supM = createMemorySupabase({
+    players: [{ id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true }],
+    matches: [
+      row({
+        id: 's-new', external_id: 'n1', competition: 'CL', kickoff: iso(now - 24 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Rakip', away_short: 'Rakip',
+        home_score: 2, away_score: 0,
+      }),
+      row({
+        id: 's-old', external_id: 'o1', competition: 'CL',
+        kickoff: iso(Date.parse(`${SY}-03-15T18:45:00Z`)), status: 'FINISHED',
+        home_name: 'Fenerbahçe', home_short: 'Fenerbahçe',
+        away_name: 'Eski Rakip', away_short: 'Eski Rakip',
+        home_score: 1, away_score: 0, season_year: SY - 1,
+      }),
+    ],
+  })
+  const p = await buildLeaguePayload(supM)
+  assert.deepEqual(p.meta.season, { year: SY, label: labelOf(SY) }, 'varsayılan sezon = aktif sezon')
+  assert.deepEqual(p.meta.seasons, [
+    { year: SY, label: labelOf(SY) },
+    { year: SY - 1, label: labelOf(SY - 1) },
+  ], 'sezonlar desc; seçili ligin tüm sezonları')
+  assert.deepEqual(p.meta.leagues, [{ code: 'EU', name: 'Avrupa', active: true }], 'meta.leagues aktif kayıtlar')
+  assert.deepEqual(p.matches.map(m => m.id), ['s-new'], 'varsayılan payload yalnız aktif sezonu taşır')
+
+  const oldP = await buildLeaguePayload(supM, { seasonYear: SY - 1 })
+  assert.deepEqual(oldP.matches.map(m => m.id), ['s-old'], 'seçilen sezon izole')
+  assert.deepEqual(oldP.meta.season, { year: SY - 1, label: labelOf(SY - 1) })
+})
+
+suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonluk (P2-bonus)', async () => {
+  const supS = createMemorySupabase({
+    players: [
+      { id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true },
+      { id: 'q2', name: 'Bora', color: '#5ce1e6', is_active: true },
+    ],
+    matches: [
+      row({
+        id: 'm-old', external_id: 'o2', competition: 'CL',
+        kickoff: iso(Date.parse(`${SY - 1}-11-10T18:45:00Z`)), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Rakip', away_short: 'Rakip',
+        home_score: 2, away_score: 0, season_year: SY - 1,
+      }),
+      row({
+        id: 'm-new', external_id: 'n2', competition: 'CL', kickoff: iso(now - 24 * hour), status: 'FINISHED',
+        home_name: 'Beşiktaş', home_short: 'Beşiktaş',
+        away_name: 'Rakip', away_short: 'Rakip',
+        home_score: 0, away_score: 1,
+      }),
+    ],
+    predictions: [
+      { player_id: 'q1', match_id: 'm-old', outcome: 'H' }, // eski sezonda doğru
+      { player_id: 'q2', match_id: 'm-old', outcome: 'A' }, // eski sezonda yanlış
+      { player_id: 'q1', match_id: 'm-new', outcome: 'H' }, // yeni sezonda yanlış
+      { player_id: 'q2', match_id: 'm-new', outcome: 'A' }, // yeni sezonda doğru
+    ],
+    app_config: [
+      { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
+      { key: `bonus:${SY - 1}`, value: { q1: 2 } },
+      { key: `bonus:${SY}`, value: { q2: 5 } },
+    ],
+  })
+
+  const oldP = await buildLeaguePayload(supS, { seasonYear: SY - 1 })
+  assert.deepEqual(oldP.matches.map(m => m.id), ['m-old'])
+  const oldSt = Object.fromEntries(oldP.standings.map(r => [r.id, r]))
+  assert.equal(oldSt.q1.points, 3, 'eski sezon: 1 doğru + o sezonun bonusu (2)')
+  assert.equal(oldSt.q1.bonusPoints, 2, 'bonus app_config bonus:<eski sezon> anahtarından')
+  assert.equal(oldSt.q1.played, 1)
+  assert.equal(oldSt.q2.points, 0, 'eski sezonda doğru yok; yeni sezon bonusu SIZMAZ')
+  assert.equal(oldSt.q2.bonusPoints, 0)
+
+  const newP = await buildLeaguePayload(supS) // varsayılan: aktif sezon
+  assert.deepEqual(newP.matches.map(m => m.id), ['m-new'])
+  const newSt = Object.fromEntries(newP.standings.map(r => [r.id, r]))
+  assert.equal(newSt.q2.points, 6, 'yeni sezon: 1 doğru + o sezonun bonusu (5)')
+  assert.equal(newSt.q2.bonusPoints, 5)
+  assert.equal(newSt.q1.points, 0, 'eski sezon doğrusu yeni sezona SIZMAZ')
+  assert.equal(newSt.q1.bonusPoints, 0, 'eski bonus yeni sezona SIZMAZ')
+  assert.equal(newP.players.find(pl => pl.id === 'q2').bonusPoints, 5, 'players listesi de sezonluk bonusu taşır')
+})
+
+suite.test('bilinmeyen lig kodu hata fırlatır (api 400 kaynağı)', async () => {
+  await assert.rejects(
+    () => buildLeaguePayload(createMemorySupabase(), { league: 'TSL' }),
+    /Bilinmeyen lig/,
+  )
+})
+
+suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalır', async () => {
+  const p = await buildLeaguePayload(mainSupabase(), { seasonYear: SY + 4 })
+  assert.equal(p.matches.length, 0)
+  assert.equal(p.meta.counts.matches, 0)
+  assert.equal(p.meta.nextMatch, null)
+  assert.equal(p.meta.season.year, SY + 4)
+  assert.equal(p.standings.length, 3)
+  assert.ok(p.standings.every(r => r.points === 0 && r.played === 0 && r.bonusPoints === 0))
+  assert.deepEqual(p.meta.seasons.map(s => s.year), [SY], 'sezon listesi seçili ligin mevcut sezonları')
+})
+
+suite.test('api /api/league GET: bilinmeyen lig 400, geçersiz sezon 400', async () => {
+  const req = q => new Request(`http://localhost:8787/api/league${q}`)
+  const badLeague = await leagueGET(req('?league=TSL'))
+  assert.equal(badLeague.status, 400)
+  assert.equal((await badLeague.json()).error, 'Bilinmeyen lig.')
+
+  for (const season of ['abc', '203', '20265', '-2026', '20a6']) {
+    const res = await leagueGET(req(`?season=${encodeURIComponent(season)}`))
+    assert.equal(res.status, 400, `season=${season} → 400`)
+    assert.equal((await res.json()).error, 'Geçersiz sezon.')
+  }
+
+  // Lig denetimi önce: birleşik hatalı istemde lig mesajı döner.
+  const both = await leagueGET(req('?league=TSL&season=xx'))
+  assert.equal((await both.json()).error, 'Bilinmeyen lig.')
+
+  const post = await leagueGET(new Request('http://localhost:8787/api/league', { method: 'POST' }))
+  assert.equal(post.status, 405)
 })
 
 await runIfMain(suite)

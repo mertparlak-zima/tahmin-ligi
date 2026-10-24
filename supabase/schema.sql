@@ -35,6 +35,10 @@ create table if not exists matches (
   away_score           int,
   matchday             int,
   stage                text,
+  -- Dondurulmuş boyut flag'leri (#18): insert anında yazılır, sonradan
+  -- değişmez. Mevcut kurulumlarda migrations/ SQL'i ile eklenir.
+  season_year          int,
+  league               text not null default 'EU',
   last_provider_update timestamptz,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
@@ -43,6 +47,7 @@ create table if not exists matches (
 
 create index if not exists matches_kickoff_idx on matches (kickoff);
 create index if not exists matches_status_idx on matches (status);
+create index if not exists matches_league_season_idx on matches (league, season_year);
 
 create table if not exists predictions (
   player_id  uuid not null references players (id) on delete cascade,

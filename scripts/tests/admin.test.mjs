@@ -35,6 +35,10 @@ const row = o => ({
   provider: 'espn', minute: null,
   home_tla: null, away_tla: null, home_crest: null, away_crest: null,
   matchday: 1, stage: null,
+  // Dondurulmuş flag'ler (P5): bootstrap editörü aktif (lig, sezon) filtresi
+  // gördüğü için tohumlar aynı kapsamda olmalı.
+  league: 'EU',
+  season_year: seasonYear(),
   ...o,
 })
 

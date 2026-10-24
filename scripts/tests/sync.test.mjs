@@ -99,6 +99,9 @@ const storedRow = (id, ext, status, kickoffMs, hs, as, homeName, awayName, minut
   away_score: as,
   matchday: 1,
   stage: null,
+  // Dondurulmuş flag'ler (P5): tohum satırları da gerçek şemadaki gibi taşır.
+  season_year: SY,
+  league: 'EU',
   updated_at: '2026-01-01T00:00:00.000Z',
 })
 
@@ -129,6 +132,8 @@ suite.test('ilk tur: maçlar yazılır, sync_state güncellenir', async () => {
   assert.equal(m602.status, 'IN_PLAY')
   assert.equal(m602.minute, 55)
   assert.equal(m602.home_name, 'Fenerbahçe', 'kanonik ad saklanır')
+  assert.equal(m602.season_year, SY, 'yeni satır kickofftan sezon alır')
+  assert.equal(m602.league, 'EU', 'yeni satır aktif ligi alır')
 
   const state = sup.store.sync_state[0]
   assert.ok(state.last_success_at, 'last_success_at yazılır')
@@ -521,6 +526,97 @@ suite.test('maybeSync P8: canlı maçta 90 sn eşiği uygulanır → 5 dk bayat 
   } finally {
     stub.restore()
   }
+})
+
+// --- S14: sezon/lig mimarisi (v6 P5/P6) ---
+
+// Sezon devri simülasyonu: "şimdi" Eylül 2027'ye enjekte edilir → aktif sezon
+// 2027; ESPN yanıtı yalnız 2027-28 sezonunun maçlarını içerir.
+const ROLLOVER_NOW = new Date('2027-09-15T12:00:00Z')
+
+suite.test('sezon devri: eski sezon/başka lig satırları kalır, prune yeni sezona sınırlı kalır', async () => {
+  const supR = createMemorySupabase({
+    matches: [
+      // 2026-27 sezonundan bitmiş maç (kickoff geçmişte).
+      { ...storedRow('r-old', '6101', 'FINISHED', Date.parse('2027-05-20T18:45:00Z'), 1, 0, 'Fenerbahçe', 'Rakip'), season_year: 2026 },
+      // 2026-27 sezonundan Temmuz ötesine ertelenmiş maç (kickoff GELECEKTE —
+      // kapsam olmasa futureCandidate olarak silinecekti).
+      { ...storedRow('r-ert', '6102', 'POSTPONED', Date.parse('2027-10-01T18:45:00Z'), null, null, 'Beşiktaş', 'Rakip'), season_year: 2026 },
+      // Başka lige ait, aktif sezon satırı: lige göre izolasyon.
+      { ...storedRow('r-tsl', '6103', 'TIMED', Date.parse('2027-10-05T18:45:00Z'), null, null, 'Galatasaray', 'Rakip'), season_year: 2027, league: 'TSL' },
+    ],
+  })
+  const evNewSeason = espnEvent({
+    id: 6201,
+    seasonYear: 2027,
+    date: iso(Date.parse('2027-10-20T18:45:00Z')),
+    statusName: 'STATUS_SCHEDULED',
+    state: 'pre',
+    timeValid: true,
+    home: { displayName: 'Galatasaray SK' },
+    away: { displayName: 'Barcelona' },
+  })
+  const result = await syncWith(supR, [['uefa.champions/scoreboard', { events: [evNewSeason] }]], undefined, { now: ROLLOVER_NOW })
+  assert.equal(result.complete, true)
+  assert.ok(supR.store.matches.some(m => m.external_id === '6101'), 'eski sezon bitmiş maçı kalır')
+  assert.ok(supR.store.matches.some(m => m.external_id === '6102'), 'eski sezona ait ertelenmiş (gelecek kickofflu) maç kalır')
+  assert.ok(supR.store.matches.some(m => m.external_id === '6103'), 'başka lige ait satıra dokunulmaz')
+  const newRow = supR.store.matches.find(m => m.external_id === '6201')
+  assert.equal(newRow.season_year, 2027, 'yeni satır yeni sezonu alır')
+  assert.equal(newRow.league, 'EU')
+  assert.equal(supR.store.matches.length, 4, 'hiçbir tohum satırı silinmedi')
+})
+
+suite.test('dondurulmuş flag: kickoff Temmuz ötesine kayınca season_year/league değişmez', async () => {
+  const supF = createMemorySupabase({
+    matches: [storedRow('f1', '6301', 'TIMED', T0 + 24 * hour, null, null, 'Fenerbahçe', 'Rakip')],
+  })
+  const movedKickoff = iso(Date.parse(`${SY + 1}-08-15T18:45:00Z`))
+  const evMoved = espnEvent({
+    id: 6301,
+    seasonYear: SY, // hâlâ SY sezonunun maçı; sadece kickoff kaydı
+    date: movedKickoff,
+    statusName: 'STATUS_SCHEDULED',
+    state: 'pre',
+    timeValid: true,
+    home: { displayName: 'Fenerbahce SK' },
+    away: { displayName: 'Rakip' },
+  })
+  const result = await syncWith(supF, [[CHAMPIONS, { events: [evMoved] }]])
+  assert.equal(result.changed, 1, 'kickoff değişimi yazılır')
+  const row = supF.store.matches.find(m => m.external_id === '6301')
+  assert.equal(Date.parse(row.kickoff), Date.parse(movedKickoff), 'kickoff güncellenir')
+  assert.equal(row.season_year, SY, 'season_year dondurulmuş — yeni takvime kaysa bile değişmez')
+  assert.equal(row.league, 'EU', 'league de dondurulmuş')
+})
+
+suite.test('imza karşılaştırması flag\'leri içermez: flag\'li aynı imza → yazılmaz, flag korunur', async () => {
+  const supI = createMemorySupabase({
+    matches: [
+      { ...storedRow('i1', '601', 'FINISHED', T0 - 96 * hour, 1, 4, 'Galatasaray', 'Barcelona'), season_year: SY - 1 },
+    ],
+  })
+  const result = await syncWith(supI, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(result.changed, 0, 'imza aynı → flag farkı yazma tetiklemez')
+  assert.equal(supI.store.matches[0].season_year, SY - 1, 'frozen flag olduğu gibi kalır')
+})
+
+suite.test('R7 onarım: flag\'i null satır imza AYNI olsa bile yeniden yazılır', async () => {
+  const supG = createMemorySupabase({
+    matches: [
+      { ...storedRow('g1', '601', 'FINISHED', T0 - 96 * hour, 1, 4, 'Galatasaray', 'Barcelona'), season_year: null, league: null },
+    ],
+  })
+  const stampBefore = supG.store.matches[0].updated_at
+  const result = await syncWith(supG, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(result.changed, 1, 'null flag onarım koşulu yeniden yazmayı tetikler')
+  const row = supG.store.matches.find(m => m.external_id === '601')
+  assert.equal(row.season_year, SY, 'season_year doluşur')
+  assert.equal(row.league, 'EU', 'league dolar (varsayılan)')
+  assert.notEqual(row.updated_at, stampBefore, 'satır gerçekten yeniden yazıldı')
+  // İkinci tur: flag artık dolu + imza aynı → bir daha dokunulmaz.
+  const second = await syncWith(supG, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(second.changed, 0, 'onarım sonrası tur normal atlamaya döner')
 })
 
 await runIfMain(suite)

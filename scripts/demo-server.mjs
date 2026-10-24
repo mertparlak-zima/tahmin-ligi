@@ -227,7 +227,10 @@ async function handleApi(request) {
       .then(() => maybeSync(supabase))
       .catch(() => {})
     await syncing
-    const payload = await buildLeaguePayload(supabase)
+    // ?season= → gerçek buildLeaguePayload sezon filtresi (#18 PR2).
+    const seasonParam = new URL(request.url, `http://localhost:${PORT}`).searchParams.get('season')
+    const season = seasonParam && /^\d{4}$/.test(seasonParam) ? Number(seasonParam) : null
+    const payload = await buildLeaguePayload(supabase, season ? { seasonYear: season } : undefined)
     if (process.env.DEV_FAKE_STALE) {
       // Deterministik bayatlık senaryosu (browser-check için): bant + SON BİLGİ
       // etiketlerini her koşulda tetikler; yalnız demo sunucuda çalışır.
@@ -329,5 +332,42 @@ server.listen(PORT, () => {
   console.log(`  Başlangıç    : 3 demo oyuncu (Ogün, Mert, Ece) · veriler bellekte, reset'te silinir`)
   console.log(`  Maç verisi   : gerçek ESPN · açılışta çekiliyor (~2-4 sn)`)
   // Açılışta ısıtma: ilk /api/league isteği beklemeden fikstürü çek.
-  syncing = maybeSync(supabase).catch(err => console.error('açılış senkronu hatası:', err.message))
+  syncing = maybeSync(supabase)
+    .catch(err => console.error('açılış senkronu hatası:', err.message))
+    .then(async () => {
+      // DEV_FAKE_ARCHIVE=1: geçmiş sezon UI akışını uçtan uca denemek için
+      // ilk 8 maçın kopyasını yapma sezonuna (2025) taşır — yalnız bellekte.
+      if (!process.env.DEV_FAKE_ARCHIVE) return
+      const { data: rows } = await supabase.from('matches').select('*').order('kickoff', { ascending: true })
+      const source = (rows ?? []).slice(0, 8)
+      if (source.length === 0) return
+      const idByOld = new Map()
+      const clones = source.map(m => {
+        const id = randomUUID()
+        idByOld.set(m.id, id)
+        return {
+          ...m,
+          id,
+          external_id: `${m.external_id}-s2025`,
+          kickoff: new Date(Date.parse(m.kickoff) - 364 * 24 * 3600_000).toISOString(),
+          season_year: 2025,
+          league: 'EU',
+        }
+      })
+      // Bellek deposunun insert'i tek satır beklediğinden dizi yazımı upsert'le.
+      await supabase.from('matches').upsert(clones, { onConflict: 'id' })
+      // Demo oyuncular için deterministic tahminler → arşiv puan tablosu dolu olsun.
+      const { data: players } = await supabase.from('players').select('*')
+      const outcomes = ['H', 'D', 'A']
+      const predClones = []
+      let i = 0
+      for (const m of clones) {
+        for (const p of players ?? []) {
+          predClones.push({ player_id: p.id, match_id: m.id, outcome: outcomes[(i + p.name.length) % 3] })
+          i++
+        }
+      }
+      if (predClones.length > 0) await supabase.from('predictions').upsert(predClones, { onConflict: 'player_id,match_id' })
+      console.log(`  Fake arşiv   : 2025 sezonuna ${clones.length} maç + ${predClones.length} tahmin kopyalandı`)
+    })
 })

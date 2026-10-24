@@ -12,6 +12,11 @@ class LeagueStore extends Store {
   lastLoadedAt = 0
   /** Art arda başarısız polling sayısı — bağlantı göstergesi için (#18). */
   consecutiveFailures = 0
+  /** Seçili arşiv sezonu (#18 PR2): 0 = aktif sezon. */
+  selectedSeason = 0
+  archiveLoading = false
+  archiveError: string | null = null
+  private archiveCache: Record<number, any> = {}
 
   selectedDate = ''
   statusFilter: StatusFilter = 'all'
@@ -71,6 +76,25 @@ class LeagueStore extends Store {
 
   refresh() {
     return this.load()
+  }
+
+  /** "Geçmiş Sezonlar" seçimi (#18 PR2): sezon verisi ayrı çekilir ve önbelleklenir;
+   *  ana `data` (Maçlar/Geçmiş/Tahminlerim/MatchSheet) her zaman aktif sezon kalır. */
+  async selectSeason(year: number) {
+    this.selectedSeason = year
+    if (year === 0) return
+    if (this.archiveCache[year]) return
+    this.archiveLoading = true
+    this.archiveError = null
+    try {
+      const res = await fetch(`/api/league?season=${year}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
+      this.archiveCache[year] = await res.json()
+    } catch (err: any) {
+      this.archiveError = err?.message ?? 'Sezon verisi alınamadı.'
+    } finally {
+      this.archiveLoading = false
+    }
   }
 
   onVisibilityGained() {
@@ -220,6 +244,28 @@ class LeagueStore extends Store {
 
   get staleActive(): boolean {
     return this.staleInfo.level !== 'none'
+  }
+
+  // --- Sezonlar (#18 PR2) ---
+
+  /** meta.seasons (desc, ilk öğe aktif sezon). */
+  get seasonsList(): Array<{ year: number; label: string }> {
+    return this.data?.meta?.seasons ?? []
+  }
+
+  get activeSeasonLabel(): string {
+    return this.seasonsList[0]?.label ?? 'Bu sezon'
+  }
+
+  /** Aktif sezon dışındaki sezonlar (desc) — türetme store getter'ında (Gea kuralı). */
+  get pastSeasons(): Array<{ year: number; label: string }> {
+    return this.seasonsList.slice(1)
+  }
+
+  /** Puan Durumu sayfasının verisi: seçili arşiz sezonu ya da aktif sezon. */
+  get standingsData(): any {
+    if (this.selectedSeason === 0) return this.data
+    return this.archiveCache[this.selectedSeason] ?? null
   }
 
   get loadingInitial(): boolean {

@@ -245,10 +245,12 @@ class Query {
   }
 }
 
-// Tablo sütun varsayılanları (supabase/schema.sql ile uyumlu): insert/upsert
-// eğer alanı getirmediyse DB'in dolduracağı değeri uygula.
+// Tablo sütun varsayılanları (supabase/schema.sql + 2026-10-season-league.sql
+// ile uyumlu): insert/upsert eğer alanı getirmediyse DB'in dolduracağı değeri
+// uygula. league NOT NULL DEFAULT 'EU'; season_year nullable (R7 hayaletleri).
 const COLUMN_DEFAULTS = {
   players: { is_active: true },
+  matches: { league: 'EU' },
 }
 
 export function createMemorySupabase(seed = {}, opts = {}) {

@@ -2,9 +2,8 @@ import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
 import StandingsRow from './StandingsRow'
 
-export default function StandingsTable() {
-  const rows = leagueStore.standings
-  if (rows.length === 0) {
+export default function StandingsTable({ standings }: { standings: any[] }) {
+  if (standings.length === 0) {
     return <div class="empty">Puan tablosu için henüz veri yok.</div>
   }
   return (
@@ -23,7 +22,7 @@ export default function StandingsTable() {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
+          {standings.map(row => (
             <StandingsRow key={row.id} row={row} isOwn={row.id === uiStore.identityId} />
           ))}
         </tbody>

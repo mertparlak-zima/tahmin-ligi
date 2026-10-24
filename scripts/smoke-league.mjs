@@ -3,6 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { buildLeaguePayload } from '../lib/league.js'
+import { seasonYear } from '../lib/espn.js'
 
 const hour = 3600_000
 const now = Date.now()
@@ -12,6 +13,8 @@ const players = [
   { id: 'p1', name: 'Ogün', color: '#b8f34a', is_active: true },
   { id: 'p2', name: 'Mert', color: '#5ce1e6', is_active: true },
   { id: 'p3', name: 'Eski', color: '#ff9f68', is_active: false },
+  // bonus_points LEGACY kolon: artık okunmaz (P2-bonus); p4'nün bonusu
+  // aşağıda app_config `bonus:<sezon>` anahtarından gelir.
   { id: 'p4', name: 'Bonuslu', color: '#ffd05c', is_active: true, bonus_points: 2 },
 ]
 
@@ -50,9 +53,15 @@ const predictions = [
 ]
 
 function mockSupabase() {
-  const tables = { players, matches, predictions }
+  const tables = {
+    players, matches, predictions,
+    app_config: [
+      { key: 'scoring', value: { label: 'Test', status: 'final', correctOutcome: 1 } },
+      // Sezonluk bonus (P2-bonus): {playerId: puan} — aktif sezon anahtarı.
+      { key: `bonus:${seasonYear(new Date())}`, value: { p4: 2 } },
+    ],
+  }
   const singletons = {
-    app_config: { value: { label: 'Test', status: 'final', correctOutcome: 1 } },
     sync_state: { last_attempt_at: iso(now), last_success_at: iso(now), last_error: null, matches_seen: 3 },
   }
 

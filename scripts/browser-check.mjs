@@ -141,6 +141,22 @@ if (standingsRows > 0) {
   console.log('  bilgi: aktif oyuncu yok → puan tablosu/podyum atlandı')
 }
 
+// --- 5b) Geçmiş Sezonlar seçicisi (#18 PR2) ---
+const seasonSelectCount = await page.locator('.season-picker select').count()
+check('sezon seçici render', seasonSelectCount === 1)
+if (process.env.BROWSER_CHECK_TEST_ARCHIVE) {
+  // DEV_FAKE_ARCHIVE=1 ile koşulan demo sunucuda geçmiş sezon akışı.
+  const pastOptions = await page.locator('.season-picker option:not([value="0"])').count()
+  check('geçmiş sezon seçeneği var (fake archive)', pastOptions > 0)
+  if (pastOptions > 0) {
+    await page.locator('.season-picker select').selectOption({ index: 1 })
+    await page.waitForTimeout(1500)
+    check('arşiv sezonu puan tablosu render', (await page.locator('.standings-table tbody tr').count()) > 0)
+  }
+} else {
+  console.log('  bilgi: arşiv akışı atlandı (BROWSER_CHECK_TEST_ARCHIVE yok — gerçek DB tek sezon)')
+}
+
 await page.locator('.nav-item', { hasText: 'Tahminlerim' }).first().click()
 await page.waitForTimeout(500)
 const identityModal = await page.locator('.identity-grid, .mypage, .empty').count()
