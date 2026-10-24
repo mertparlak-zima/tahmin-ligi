@@ -147,6 +147,29 @@ src/
   senkron bir arada 3-8 sn sürebilir; arayüz iskelet gösterir.
 - Sezon geçişinde (Temmuz) önceki sezon maçları temizlenir; arşiv faz 2.
 
+### Yedekleme
+
+Tahminler elle girilen veridir; ESPN'den veya başka bir kaynaktan yeniden
+üretilemez. Supabase free tier otomatik yedek vermediği için düzenli yerel
+yedek alınır:
+
+```bash
+node --env-file=.env scripts/backup-db.mjs                                        # yedek al
+node --env-file=.env scripts/restore-predictions.mjs backups/<dosya>.json --dry   # ne yazılacağını gör
+node --env-file=.env scripts/restore-predictions.mjs backups/<dosya>.json         # geri yükle
+```
+
+Yedek dosyaları `backups/` altına tarih damgalı JSON olarak yazılır ve
+`.gitignore` kapsamındadır (commit'e girmez). İçerik: oyuncular (tüm sütunlar),
+tahminler (tüm sütunlar) ve `app_config` satırları (puanlama kuralı, sezonluk
+bonuslar). Geri yükleme idempotent upsert'tir; hiçbir satır silinmez, tahminin
+geri gelmesi için bağlı maçın DB'de mevcut olması yeterlidir.
+
+Ne zaman alınmalı: `#18` implementasyon adımlarından önce ve büyük maç
+haftalarının sonunda. Yönetim panelindeki "son yedek" damgası
+`app_config` tablosundaki `last_backup` anahtarından okunur; bu damgayı
+`backup-db.mjs` yazar.
+
 ## Faz 2 fikirleri
 
 - Form/streak çipleri puan tablosunda

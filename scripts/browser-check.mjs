@@ -33,6 +33,17 @@ check('konsol hatası yok', consoleErrors.length === 0, consoleErrors.slice(0, 2
 const topbar = await page.locator('.topbar').count()
 check('topbar render', topbar === 1)
 
+// Bayatlık bandı: normal akışta yanlış alarm YOK olmalı (#18).
+// DEV_FAKE_STALE=1 ile koşulan demo sunucuda BROWSER_CHECK_TEST_STALE=1
+// verilirse bandın ve SON BİLGİ etiketinin GÖRÜNDÜĞÜ doğulanır.
+if (process.env.BROWSER_CHECK_TEST_STALE) {
+  const bandOpen = await page.locator('.stale-band.open').count()
+  check('bayatlık bandı görünür (fake stale)', bandOpen === 1)
+} else {
+  const bandOpen = await page.locator('.stale-band.open').count()
+  check('bayatlık bandı yanlış alarm yok', bandOpen === 0)
+}
+
 const dateChips = await page.locator('.date-chip').count()
 check('tarih şeridi dolu', dateChips > 0, `${dateChips} chip`)
 
@@ -43,6 +54,17 @@ await page.waitForTimeout(500)
 
 const matchRows = await page.locator('.match-row').count()
 check('maç kartları render', matchRows > 0, `${matchRows} kart`)
+
+if (process.env.BROWSER_CHECK_TEST_STALE) {
+  // Fake-stale modunda canlıya zorlanan maçın gününü seç (canlı noktalı chip).
+  const liveChip = page.locator('.date-chip').filter({ has: page.locator('.date-live-dot') }).first()
+  if (await liveChip.count() > 0) {
+    await liveChip.click()
+    await page.waitForTimeout(400)
+  }
+  const sonLabel = await page.locator('.slot.stale', { hasText: 'SON BİLGİ' }).count()
+  check('canlı satır SON BİLGİ etiketi', sonLabel >= 1, `${sonLabel} satır`)
+}
 
 // --- 2) Tarih chip'ine tıklama (dinamik class değişimi) ---
 const firstChip = page.locator('.date-chip').first()

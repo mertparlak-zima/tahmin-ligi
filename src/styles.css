@@ -233,6 +233,35 @@ a {
   background: rgba(184, 243, 74, 0.08);
 }
 
+/* Bayatlık/bağlantı uyarı bandı — topbar içinde, tüm sayfalarda görünür (#18). */
+.stale-band {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 8px -20px -10px;
+  padding: 8px 20px;
+  background: rgba(255, 93, 112, 0.1);
+  border-top: 1px solid rgba(255, 93, 112, 0.3);
+  color: var(--live);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stale-band.offline {
+  background: rgba(255, 208, 92, 0.08);
+  border-top-color: rgba(255, 208, 92, 0.3);
+  color: var(--gold);
+}
+
+.stale-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  animation: pulse 1.6s ease infinite;
+}
+
 .icon-btn.spinning svg {
   animation: spin 0.9s linear infinite;
 }
@@ -613,6 +642,12 @@ a {
 
 .slot.inactive .slot-main {
   color: var(--muted-2);
+}
+
+/* Bayatlık anında canlı dakika dürüstçe soluklaştırılır (#18). */
+.slot.stale .slot-main,
+.slot.stale .slot-sub {
+  opacity: 0.62;
 }
 
 .match-teams {

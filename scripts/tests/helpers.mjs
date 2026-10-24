@@ -207,6 +207,12 @@ class Query {
 
     if (this.op === 'delete') {
       const doomed = new Set(filtered)
+      // Gerçek DB'deki FK cascade taklidi: matches satırı düşünce ilgili
+      // predictions satırları da düşer (prune koruması testlerinin ölçtüğü davranış).
+      if (this.table === 'matches') {
+        const doomedIds = new Set(filtered.map(row => row.id))
+        this.store.predictions = (this.store.predictions ?? []).filter(p => !doomedIds.has(p.match_id))
+      }
       this.store[this.table] = table.filter(row => !doomed.has(row))
       return { data: null, error: null }
     }
@@ -279,14 +285,24 @@ export function createMemorySupabase(seed = {}, opts = {}) {
 
 /**
  * routes: [needle, sonuç][] — URL needle içeriyorsa sonuç uygulanır.
- * sonuç: JSON nesnesi (200) veya Error (reject — yeniden denemesiz).
+ * sonuç: JSON nesnesi (200), Error (reject — yeniden denemesiz) veya stub spec:
+ *   { delayMs, json } → delayMs bekleyip json'u döndürür (gerçek bekler),
+ *   { never: true }   → hiç çözülmeyen istek (askıda kalan kaynak; timer tutmaz).
+ * defaultJson da spec olabilir (örn. tüm kaynakları askıya almak için).
  * Eşleşmeyen URL'ler defaultJson alır (varsayılan { events: [] }).
  */
 export function withStubbedFetch(routes = [], { defaultJson = { events: [] } } = {}) {
   const calls = []
   const original = globalThis.fetch
-  const respond = value => {
+  const isStubSpec = v =>
+    v != null && typeof v === 'object' && (v.never === true || Number.isFinite(v.delayMs))
+  const respond = async value => {
     if (value instanceof Error) throw value
+    if (isStubSpec(value)) {
+      if (value.never) await new Promise(() => {}) // hiç çözülmez
+      await new Promise(r => setTimeout(r, value.delayMs))
+      return respond(value.json)
+    }
     return new Response(JSON.stringify(value), {
       status: 200,
       headers: { 'content-type': 'application/json' },

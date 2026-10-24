@@ -228,6 +228,26 @@ async function handleApi(request) {
       .catch(() => {})
     await syncing
     const payload = await buildLeaguePayload(supabase)
+    if (process.env.DEV_FAKE_STALE) {
+      // Deterministik bayatlık senaryosu (browser-check için): bant + SON BİLGİ
+      // etiketlerini her koşulda tetikler; yalnız demo sunucuda çalışır.
+      const nowIso = new Date().toISOString()
+      payload.meta.sync = {
+        lastAttemptAt: nowIso,
+        lastSuccessAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
+        lastError: 'demo: kaynak zaman aşımı (DEV_FAKE_STALE)',
+        matchesSeen: payload.meta.sync?.matchesSeen ?? 0,
+        lastSuccessAgeMinutes: 240,
+      }
+      const target = payload.matches.find(m => !m.isFinished) ?? payload.matches[0]
+      if (target) {
+        target.isLive = true
+        target.isStarted = true
+        target.statusGroup = 'live'
+        target.minute = 67
+        target.predictionsVisible = true
+      }
+    }
     console.log(`GET /api/league → ${payload.meta.counts.matches} maç (${Date.now() - started} ms)`)
     return new Response(JSON.stringify(payload), {
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },

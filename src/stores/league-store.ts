@@ -10,6 +10,8 @@ class LeagueStore extends Store {
   loading = false
   error: string | null = null
   lastLoadedAt = 0
+  /** Art arda başarısız polling sayısı — bağlantı göstergesi için (#18). */
+  consecutiveFailures = 0
 
   selectedDate = ''
   statusFilter: StatusFilter = 'all'
@@ -28,10 +30,12 @@ class LeagueStore extends Store {
       if (seq !== this.seq) return
       this.data = payload
       this.error = null
+      this.consecutiveFailures = 0
       this.lastLoadedAt = Date.now()
       this.ensureSelectedDate()
     } catch (err: any) {
       if (seq !== this.seq) return
+      this.consecutiveFailures += 1
       if (!silent || !this.data) this.error = err?.message ?? 'Veri alınamadı.'
     } finally {
       if (seq === this.seq) {
@@ -183,6 +187,39 @@ class LeagueStore extends Store {
 
   get hasLive(): boolean {
     return this.liveMatches.length > 0
+  }
+
+  /**
+   * Bayatlık durumu (#18 bayatlık politikası): global uyarı bandının ve canlı
+   * satırlardaki "SON BİLGİ" dürüstlük etiketinin kaynağı.
+   * Formül: (lastError && lastAttempt > lastSuccess) VEYA yaş > eşik;
+   * eşikler senkron eşiklerinin belirgin üstünde: canlı 5 dk, yaklaşan
+   * maç (≤6 sa) 30 dk, aksi halde 3 saat.
+   */
+  get staleInfo(): { level: 'none' | 'stale' | 'offline'; sinceIso: string | null } {
+    if (!this.data) return { level: 'none', sinceIso: null }
+    if (this.consecutiveFailures >= 2) {
+      return { level: 'offline', sinceIso: this.data.meta?.generatedAt ?? null }
+    }
+    const sync = this.data.meta?.sync
+    const lastSuccess = sync?.lastSuccessAt ? Date.parse(sync.lastSuccessAt) : 0
+    const lastAttempt = sync?.lastAttemptAt ? Date.parse(sync.lastAttemptAt) : 0
+    const ageMin = lastSuccess ? (Date.now() - lastSuccess) / 60_000 : Number.POSITIVE_INFINITY
+    const upcomingSoon = (this.data.matches ?? []).some((m: any) => {
+      if (m.isLive || m.isFinished || m.isStarted) return false
+      const diff = Date.parse(m.kickoff) - Date.now()
+      return diff < 6 * 3_600_000 && diff > -30 * 60_000
+    })
+    const threshold = this.hasLive ? 5 : upcomingSoon ? 30 : 180
+    const failing = Boolean(sync?.lastError) && lastAttempt > lastSuccess
+    if (failing || ageMin > threshold) {
+      return { level: 'stale', sinceIso: this.data.meta?.generatedAt ?? null }
+    }
+    return { level: 'none', sinceIso: null }
+  }
+
+  get staleActive(): boolean {
+    return this.staleInfo.level !== 'none'
   }
 
   get loadingInitial(): boolean {

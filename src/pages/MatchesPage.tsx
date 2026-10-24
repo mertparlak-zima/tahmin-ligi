@@ -31,12 +31,6 @@ export default class MatchesPage extends Component {
 
     return (
       <div class="matches-page">
-        <div class="page-meta">
-          {leagueStore.data?.meta?.sync?.lastError ? (
-            <span class="meta-warn">Canlı veri senkronizasyonunda hata var; veriler bayat olabilir.</span>
-          ) : null}
-        </div>
-
         <DateStrip />
         <FilterBar />
 

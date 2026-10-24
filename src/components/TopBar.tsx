@@ -3,9 +3,12 @@ import leagueStore from '../stores/league-store'
 import adminStore from '../stores/admin-store'
 import uiStore from '../stores/ui-store'
 import { cn } from '../utils/cn'
+import { fmtTime } from '../utils/format'
 
 export default function TopBar() {
   const meta = leagueStore.data?.meta
+  const stale = leagueStore.staleInfo
+  const staleOpen = stale.level !== 'none'
   return (
     <header class="topbar">
       <div class="topbar-inner">
@@ -54,6 +57,17 @@ export default function TopBar() {
           </button>
         </div>
       </div>
+      {staleOpen ? (
+        <div class={cn('stale-band', 'open', stale.level === 'offline' && 'offline')} role="status">
+          <span class="stale-dot" aria-hidden="true"></span>
+          <span class="stale-band-text">
+            {stale.level === 'offline'
+              ? 'Bağlantı kurulamıyor'
+              : 'Canlı veri alınamıyor'}
+            {stale.sinceIso ? ` — gösterilen veriler ${fmtTime(stale.sinceIso)} itibarıyla` : ''}
+          </span>
+        </div>
+      ) : null}
     </header>
   )
 }

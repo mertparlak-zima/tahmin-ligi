@@ -23,7 +23,9 @@ export default class MatchSheet extends Component {
       : match.statusGroup === 'inactive'
         ? { cls: 'inactive', text: match.status === 'CANCELLED' ? 'İPTAL' : 'ERTELENDİ' }
         : match.isLive
-          ? { cls: 'live', text: `CANLI${match.minute ? ` · ${match.minute}'` : ''}` }
+          ? leagueStore.staleActive
+            ? { cls: 'live', text: `SON BİLGİ${match.minute ? ` · ${match.minute}'` : ''}` }
+            : { cls: 'live', text: `CANLI${match.minute ? ` · ${match.minute}'` : ''}` }
           : match.isFinished
             ? { cls: 'finished', text: 'BİTTİ' }
             : { cls: 'upcoming', text: fmtTime(match.kickoff) }

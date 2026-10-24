@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { seasonYear } from '../../lib/espn.js'
-import { maybeSync, syncNow } from '../../lib/sync.js'
+import { maybeSync, staleThresholdSeconds, syncNow } from '../../lib/sync.js'
 import {
   createMemorySupabase,
   createSuite,
@@ -55,6 +55,30 @@ const evStale = () => espnEvent({
   away: { displayName: 'Barcelona' },
 })
 
+// Gelecek kickoff'lu takip edilen maçlar (prune guard / P8 fixture'ı).
+const evUpcoming = (id, ms = T0 + 80 * hour) => espnEvent({
+  id,
+  seasonYear: SY,
+  date: iso(ms),
+  statusName: 'STATUS_SCHEDULED',
+  state: 'pre',
+  timeValid: true,
+  home: { displayName: 'Galatasaray SK' },
+  away: { displayName: 'Barcelona' },
+})
+
+const EUROPA = 'uefa.europa/scoreboard' // conf slug'ını eşlemez
+const evEl = () => espnEvent({
+  id: 8101,
+  seasonYear: SY,
+  date: iso(T0 + 30 * hour),
+  statusName: 'STATUS_SCHEDULED',
+  state: 'pre',
+  timeValid: true,
+  home: { displayName: 'Fenerbahce SK' },
+  away: { displayName: 'Lyon' },
+})
+
 const storedRow = (id, ext, status, kickoffMs, hs, as, homeName, awayName, minute = null) => ({
   id,
   provider: 'espn',
@@ -78,10 +102,10 @@ const storedRow = (id, ext, status, kickoffMs, hs, as, homeName, awayName, minut
   updated_at: '2026-01-01T00:00:00.000Z',
 })
 
-const syncWith = async (sup, routes, opts) => {
+const syncWith = async (sup, routes, opts, syncOpts) => {
   const stub = withStubbedFetch(routes, opts)
   try {
-    return await syncNow(sup)
+    return await syncNow(sup, syncOpts)
   } finally {
     stub.restore()
   }
@@ -234,6 +258,268 @@ suite.test('maybeSync: veri bayatsa senkron çalışır; hata yutulur', async ()
     assert.equal(supFail.store.matches.length, 0)
   } finally {
     stubFail.restore()
+  }
+})
+
+// --- S8: prune koruması (v6 P1) ---
+
+suite.test('prune: kickoff\'u geçmiş tahminsiz satır silinmez', async () => {
+  const sup8 = createMemorySupabase({
+    matches: [storedRow('mp', '701', 'TIMED', T0 - 48 * hour, null, null, 'Fenerbahçe', 'Eski Rakip')],
+  })
+  const result = await syncWith(sup8, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(result.complete, true)
+  assert.ok(sup8.store.matches.some(m => m.external_id === '701'), 'geçmiş kickofflu satır prune edilmez')
+})
+
+suite.test('prune: tahminli gelecek maç asla silinmez (cascade taklidiyle tahmin de kalır)', async () => {
+  const sup8 = createMemorySupabase({
+    matches: [storedRow('mt', '702', 'TIMED', T0 + 72 * hour, null, null, 'Beşiktaş', 'Marseille')],
+    predictions: [{ player_id: 'p1', match_id: 'mt', outcome: 'H' }],
+  })
+  const result = await syncWith(sup8, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(result.complete, true)
+  assert.ok(sup8.store.matches.some(m => m.external_id === '702'), 'tahminli maç prune edilmez')
+  assert.equal(sup8.store.predictions.length, 1, 'prune olsaydı tahmin cascade\'le düşerdi — düşmedi')
+})
+
+// --- S9: turnuva guard'ı (v6 P1) ---
+
+const guardSeed = clCount => ({
+  matches: Array.from({ length: clCount }, (_, i) =>
+    storedRow(`g${i + 1}`, String(9001 + i), 'TIMED', T0 + 72 * hour, null, null, 'Beşiktaş', `Rakip ${i + 1}`)),
+})
+
+suite.test('guard: DB 16 CL adayı / yanıt 7 CL → CL prune atlanır, diğer turnuva prune edilir', async () => {
+  const sup9 = createMemorySupabase({
+    matches: [
+      ...guardSeed(16).matches,
+      { ...storedRow('ge1', '9101', 'TIMED', T0 + 72 * hour, null, null, 'Fenerbahçe', 'Rakip'), competition: 'EL' },
+      { ...storedRow('ge2', '9102', 'TIMED', T0 + 72 * hour, null, null, 'Fenerbahçe', 'Rakip 2'), competition: 'EL' },
+    ],
+  })
+  const response = Array.from({ length: 7 }, (_, i) => evUpcoming(8001 + i, T0 + (80 + i) * hour))
+  const result = await syncWith(sup9, [[CHAMPIONS, { events: response }]])
+  assert.equal(result.complete, true)
+  for (let i = 0; i < 16; i += 1) {
+    assert.ok(sup9.store.matches.some(m => m.external_id === String(9001 + i)), `CL adayı ${9001 + i} silinmedi`)
+  }
+  assert.ok(!sup9.store.matches.some(m => m.external_id === '9101'), 'EL adayı (yanıtta yok, <4) prune edilir')
+  assert.ok(!sup9.store.matches.some(m => m.external_id === '9102'), 'guard turnuva bazlı çalışır')
+  assert.equal(sup9.store.matches.length, 23, '16 aday + 7 yanıt satırı kalır')
+})
+
+suite.test('guard: DB 16 CL adayı / yanıt 8 CL → ceil(16/2)=8 sınırında prune çalışır', async () => {
+  const sup9 = createMemorySupabase(guardSeed(16))
+  const response = Array.from({ length: 8 }, (_, i) => evUpcoming(8001 + i, T0 + (80 + i) * hour))
+  const result = await syncWith(sup9, [[CHAMPIONS, { events: response }]])
+  assert.equal(result.complete, true)
+  assert.equal(sup9.store.matches.filter(m => Number(m.external_id) >= 9001 && Number(m.external_id) <= 9016).length, 0, 'adaylar silindi')
+  assert.equal(sup9.store.matches.length, 8, 'yalnız yanıt satırları kalır')
+})
+
+suite.test('guard: DB<4 adayta guard devre dışı → prune çalışır', async () => {
+  const sup9 = createMemorySupabase(guardSeed(3))
+  // Yanıtta hiç CL maçı yok; complete=true için 1 EL maçı dönüyor.
+  const result = await syncWith(sup9, [[EUROPA, { events: [evEl()] }]])
+  assert.equal(result.complete, true)
+  assert.equal(sup9.store.matches.filter(m => Number(m.external_id) >= 9001).length, 0, '3 aday da silinir')
+  assert.equal(sup9.store.matches.length, 1, 'EL maçı yazıldı')
+})
+
+// --- S10: temizlik vanası (v6 P1) ---
+
+suite.test('temizlik vanası: INACTIVE + 30+ gün geçmiş + tahminsiz silinir; 29 günlük kalır', async () => {
+  const supV = createMemorySupabase({
+    matches: [
+      storedRow('v1', '9301', 'POSTPONED', T0 - 31 * 24 * hour, null, null, 'Fenerbahçe', 'Eski Rakip'),
+      storedRow('v2', '9302', 'CANCELLED', T0 - 29 * 24 * hour, null, null, 'Beşiktaş', 'Eski Rakip'),
+    ],
+  })
+  const result = await syncWith(supV, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.equal(result.complete, true)
+  assert.ok(!supV.store.matches.some(m => m.external_id === '9301'), '31 günlük tahminsiz INACTIVE silinir')
+  assert.ok(supV.store.matches.some(m => m.external_id === '9302'), '29 günlük satır henüz kalır')
+})
+
+suite.test('temizlik vanası: tahminli INACTIVE satır korunur', async () => {
+  const supV = createMemorySupabase({
+    matches: [storedRow('v3', '9303', 'SUSPENDED', T0 - 40 * 24 * hour, null, null, 'Galatasaray', 'Eski Rakip')],
+    predictions: [{ player_id: 'p1', match_id: 'v3', outcome: 'H' }],
+  })
+  await syncWith(supV, [[CHAMPIONS, { events: [evFinished()] }]])
+  assert.ok(supV.store.matches.some(m => m.external_id === '9303'), 'tahminli satır silinmez')
+  assert.equal(supV.store.predictions.length, 1, 'tahmin de düşmez')
+})
+
+suite.test('temizlik vanası: complete=false ise vanalı satır da silinmez', async () => {
+  const supV = createMemorySupabase({
+    matches: [storedRow('v4', '9304', 'POSTPONED', T0 - 35 * 24 * hour, null, null, 'Fenerbahçe', 'Eski Rakip')],
+  })
+  const result = await syncWith(supV, [
+    [CHAMPIONS, { events: [evFinished()] }],
+    ['uefa.europa.conf/scoreboard', new Error('UECL kaynağı kapalı')],
+  ])
+  assert.equal(result.complete, false)
+  assert.ok(supV.store.matches.some(m => m.external_id === '9304'), 'complete değilken vana çalışmaz')
+})
+
+// --- S11: statü kilidi (v6 P1 / R6) ---
+
+suite.test('statü kilidi: FINISHED→POSTPONED upsert\'i reddedilir, skorlar korunur', async () => {
+  const supL = createMemorySupabase({
+    matches: [storedRow('sl', '601', 'FINISHED', T0 - 96 * hour, 1, 4, 'Galatasaray', 'Barcelona')],
+  })
+  const evPostponed = espnEvent({
+    id: 601,
+    seasonYear: SY,
+    date: iso(T0 - 96 * hour),
+    statusName: 'STATUS_POSTPONED',
+    state: 'pre',
+    timeValid: true,
+    home: { displayName: 'Galatasaray SK' },
+    away: { displayName: 'Barcelona' },
+  })
+  const result = await syncWith(supL, [[CHAMPIONS, { events: [evPostponed] }]])
+  assert.equal(result.changed, 0, 'INACTIVE\'e çekme denemesi yazılmaz')
+  const row = supL.store.matches.find(m => m.external_id === '601')
+  assert.equal(row.status, 'FINISHED', 'bitmiş statü korunur')
+  assert.equal(row.home_score, 1, 'skorlar korunur')
+  assert.equal(row.away_score, 4)
+})
+
+// --- S12: fetch bütçesi (v6 P3) ---
+
+suite.test('bütçe: hiç çözülmeyen kaynak + kısa deadline → tur bütçe içinde döner, yeni deneme açılmaz', async () => {
+  const supB = createMemorySupabase()
+  const stub = withStubbedFetch([], { defaultJson: { never: true } })
+  const started = Date.now()
+  try {
+    await assert.rejects(
+      () => syncNow(supB, { fetchDeadlineMs: 150 }),
+      /Senkronizasyon kayıt döndürmedi/,
+    )
+    assert.ok(Date.now() - started < 2000, 'tur ~150 ms\'de döner, asılı kalmaz')
+    assert.equal(stub.calls.length, 6, 'kaynak başına yalnız ilk deneme açılır')
+    const state = supB.store.sync_state[0]
+    assert.ok(state.last_error.includes('bütçe'), 'last_error bütçe notu taşır')
+    assert.equal(state.last_success_at, null, 'başarısız tur başarı damgası almaz')
+  } finally {
+    stub.restore()
+  }
+})
+
+suite.test('bütçe: gecikmeli kaynak deadline aşarsa tur yanıtı beklemez', async () => {
+  const supB = createMemorySupabase()
+  const stub = withStubbedFetch([
+    [CHAMPIONS, { delayMs: 800, json: { events: [evFinished()] } }],
+  ])
+  const started = Date.now()
+  try {
+    await assert.rejects(
+      () => syncNow(supB, { fetchDeadlineMs: 150 }),
+      /Senkronizasyon kayıt döndürmedi/,
+    )
+    assert.ok(Date.now() - started < 600, '800 ms\'lik yanıt beklenmez, ~150 ms\'de döner')
+    assert.equal(stub.calls.length, 6)
+    assert.ok(supB.store.sync_state[0].last_error.includes('bütçe'))
+  } finally {
+    stub.restore()
+  }
+})
+
+suite.test('bütçe: retry gecikmesi sırasında bütçe bitince ikinci deneme açılmaz', async () => {
+  const supB = createMemorySupabase()
+  const reset = Object.assign(new Error('bağlantı sıfırlandı'), { code: 'ECONNRESET' })
+  const stub = withStubbedFetch([[`uefa.champions/scoreboard?dates=${SY}`, reset]])
+  try {
+    await assert.rejects(
+      () => syncNow(supB, { fetchDeadlineMs: 300 }),
+      /Senkronizasyon kayıt döndürmedi.*bütçe/s,
+    )
+    const clCalls = stub.calls.filter(u => u.includes(`uefa.champions/scoreboard?dates=${SY}`))
+    assert.equal(clCalls.length, 1, 'retry sleep\'i sırasında bütçe bitti → yeni fetch açılmaz')
+    assert.ok(supB.store.sync_state[0].last_error.includes('bütçe'))
+  } finally {
+    stub.restore()
+  }
+})
+
+suite.test('bütçe: maybeSync hatayı yutar, bütçe içinde döner', async () => {
+  const supM = createMemorySupabase({
+    sync_state: [{
+      id: 1,
+      last_attempt_at: iso(Date.now() - 2 * hour),
+      last_success_at: iso(Date.now() - 2 * hour),
+      last_error: null,
+      matches_seen: 0,
+      updated_at: iso(T0),
+    }],
+  })
+  const stub = withStubbedFetch([], { defaultJson: { never: true } })
+  const started = Date.now()
+  try {
+    await assert.doesNotReject(() => maybeSync(supM, 90, { fetchDeadlineMs: 150 }))
+    assert.ok(Date.now() - started < 2000, 'maybeSync bütçe içinde döner')
+    assert.ok(supM.store.sync_state[0].last_error.includes('bütçe'), 'hata last_error\'e taşınır')
+    assert.equal(stub.calls.length, 6)
+  } finally {
+    stub.restore()
+  }
+})
+
+// --- S13: uyarlanabilir senkron aralığı (v6 P8) ---
+
+suite.test('staleThresholdSeconds: canlı → canlı eşiği, ≤6 sa kickoff → 600, boşta → 3600', () => {
+  const live = { status: 'IN_PLAY', kickoff: iso(T0 - hour) }
+  const upcoming = { status: 'TIMED', kickoff: iso(T0 + 3 * hour) }
+  const far = { status: 'TIMED', kickoff: iso(T0 + 72 * hour) }
+  assert.equal(staleThresholdSeconds([far, live], 90, T0), 90, 'canlı maç → canlı eşiği')
+  assert.equal(staleThresholdSeconds([far, upcoming], 90, T0), 600, '≤6 sa içinde kickoff → 600')
+  assert.equal(staleThresholdSeconds([far], 90, T0), 3600, 'başka durum → 3600')
+  assert.equal(staleThresholdSeconds([live], 45, T0), 45, 'canlı eşiği parametreyle override edilir')
+  assert.equal(staleThresholdSeconds([], 90, T0), 3600, 'maç yok → boşta eşiği')
+})
+
+suite.test('maybeSync P8: boşta fikstürde 30 dk bayat veri taze sayılır → fetch yok', async () => {
+  const supP = createMemorySupabase({
+    matches: [storedRow('p8a', '9401', 'FINISHED', T0 - 5 * 24 * hour, 2, 0, 'Trabzonspor', 'Rakip')],
+    sync_state: [{
+      id: 1,
+      last_attempt_at: iso(Date.now() - 30 * 60_000),
+      last_success_at: iso(Date.now() - 30 * 60_000),
+      last_error: null,
+      matches_seen: 1,
+      updated_at: iso(T0),
+    }],
+  })
+  const stub = withStubbedFetch([[CHAMPIONS, { events: [evFinished()] }]])
+  try {
+    await maybeSync(supP, 90)
+    assert.equal(stub.calls.length, 0, '3600 sn eşik içinde → senkron yok')
+  } finally {
+    stub.restore()
+  }
+})
+
+suite.test('maybeSync P8: canlı maçta 90 sn eşiği uygulanır → 5 dk bayat veri senkronlanır', async () => {
+  const supP = createMemorySupabase({
+    matches: [storedRow('p8b', '9402', 'IN_PLAY', T0 - hour, 1, 0, 'Beşiktaş', 'Marseille', 55)],
+    sync_state: [{
+      id: 1,
+      last_attempt_at: iso(Date.now() - 5 * 60_000),
+      last_success_at: iso(Date.now() - 5 * 60_000),
+      last_error: null,
+      matches_seen: 1,
+      updated_at: iso(T0),
+    }],
+  })
+  const stub = withStubbedFetch([[CHAMPIONS, { events: [evFinished(), evLive("55'")] }]])
+  try {
+    await maybeSync(supP, 90)
+    assert.ok(stub.calls.length > 0, 'canlı eşik (90 sn) aşılış → senkron tetiklenir')
+  } finally {
+    stub.restore()
   }
 })
 

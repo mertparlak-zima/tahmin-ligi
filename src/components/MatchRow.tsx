@@ -1,5 +1,6 @@
 import Crest from './Crest'
 import CompBadge from './CompBadge'
+import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
 import { fmtTime } from '../utils/format'
 import { cn } from '../utils/cn'
@@ -9,19 +10,24 @@ export default function MatchRow({ match }: { match: any }) {
   const awayScore = match.score?.away ?? null
   const dimHome = match.isFinished && homeScore !== null && awayScore !== null && homeScore < awayScore
   const dimAway = match.isFinished && homeScore !== null && awayScore !== null && homeScore > awayScore
+  const stale = match.isLive && leagueStore.staleActive
 
   const slot =
     match.statusGroup === 'inactive'
       ? { cls: 'inactive', main: 'ERT.', sub: match.status === 'CANCELLED' ? 'İPTAL' : '—' }
       : match.isLive
-        ? { cls: 'live', main: match.minute ? `${match.minute}'` : '•', sub: 'CANLI' }
+        ? {
+            cls: 'live',
+            main: match.minute ? `${match.minute}'` : '•',
+            sub: stale ? 'SON BİLGİ' : 'CANLI',
+          }
         : match.isFinished
           ? { cls: 'finished', main: 'MS', sub: 'BİTTİ' }
           : { cls: 'upcoming', main: fmtTime(match.kickoff), sub: '' }
 
   return (
     <button class={cn('match-row', match.isLive && 'is-live')} click={() => uiStore.openSheet(match.id)}>
-      <div class={cn('slot', slot.cls)}>
+      <div class={cn('slot', slot.cls, stale && 'stale')}>
         <span class="slot-main">{slot.main}</span>
         {slot.sub ? <span class="slot-sub">{slot.sub}</span> : null}
       </div>

@@ -275,6 +275,26 @@ suite.test('form son 5 tahminle sınırlı; takım formu son 5 maçla sınırlı
   assert.deepEqual(first.home.form, ['G', 'G', 'G', 'G', 'G'], 'takım formu son 5 galibiyet')
 })
 
+suite.test('meta.sync.lastSuccessAgeMinutes: taze → küçük değer, başarı yoksa null', async () => {
+  assert.equal(payload.meta.sync.lastSuccessAgeMinutes, 60, 'ana senaryo: 1 saat önceki başarı → 60')
+
+  const freshSup = createMemorySupabase({
+    sync_state: [{
+      id: 1,
+      last_attempt_at: iso(Date.now()),
+      last_success_at: iso(Date.now()),
+      last_error: null,
+      matches_seen: 0,
+      updated_at: iso(Date.now()),
+    }],
+  })
+  const fresh = await buildLeaguePayload(freshSup)
+  assert.equal(fresh.meta.sync.lastSuccessAgeMinutes, 0, 'taze başarı → 0')
+
+  const never = await buildLeaguePayload(createMemorySupabase())
+  assert.equal(never.meta.sync.lastSuccessAgeMinutes, null, 'last_success yok → null')
+})
+
 // --- buildAdminPayload ---
 
 suite.test('buildAdminPayload: kilit bayrakları + "pid:mid" tahmin haritası', async () => {
