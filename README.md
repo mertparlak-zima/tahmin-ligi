@@ -138,6 +138,7 @@ Cookie/session yoktur; şifre tarayıcı sekmesi kapatılınca unutulur.
 
 ```text
 api/            Vercel serverless fonksiyonları
+infra/runner/   Yerel self-hosted Docker runner (tahmin-ligi-docker-1)
 lib/            Sunucu katmanı: espn, targets, sync, league, status, supabase
 supabase/       Veritabanı şeması
 scripts/        Duman testleri

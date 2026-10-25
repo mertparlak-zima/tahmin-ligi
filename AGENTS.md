@@ -127,6 +127,7 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
   Bitmiş maç geri alınmaz; kaynak hatasında eski veri korunur.
 - **Gea skill'leri** `.agents/skills/` altında; yeni Gea kodu yazmadan
   `gea-framework` skill'ini oku.
+- **CI ve Runner**: Tüm CI koşuları (`ci.yml`) GitHub-hosted yerine yerel self-hosted Docker runner (`tahmin-ligi-docker-1`, label `[self-hosted, linux, x64, docker, tahmin-ligi]`, `infra/runner/compose.yml`, başlatma `scripts/start-ci-runner.ps1`) üzerinde çalışır. GitHub-hosted runner kullanımı yasaktır.
 - Commit öncesi: build + ilgili testler; commit mesajları kısa Türkçe.
 
 ## Bilinen açık noktalar
