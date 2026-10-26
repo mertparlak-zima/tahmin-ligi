@@ -10,6 +10,5 @@ export const router = createRouter({
   '/puan-durumu': StandingsPage,
   '/tahminlerim': MyPredictionsPage,
   '/gecmis': ResultsPage,
-  '/admin': () => import('./pages/AdminPage'),
   '*': NotFoundPage,
 } as const)
