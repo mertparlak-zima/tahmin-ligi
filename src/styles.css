@@ -137,8 +137,9 @@ body.league-eu::before {
 }
 
 body.league-tsl::after {
-  /* TSL wordmark koyu-yoğun → EU starball'ından bir tık daha soluk. */
-  opacity: 0.06;
+  /* TSL wordmark koyu-yoğun → EU starball'ından bir tık daha soluk.
+     Tur 2: kırmızı göz yormasın diye bir tık daha indirildi. */
+  opacity: 0.04;
 }
 
 /* Tüm uygulama içeriği soluk logonun ÜSTÜNDE. .app-root pozitif
@@ -183,20 +184,21 @@ body.league-eu .brand-mark {
    --ink beyaza yakın, --accent bir tık koyulaştırıldı (bold metinde
    ~4.4:1); --ink kullanan yüzeylerin metni hep bold. */
 body.league-tsl {
-  --accent: #e8273f;
+  /* #24 turu 2 (kullanıcı raporu): kırmızı GöZ YORUYORDU — kırmızı yalnız
+     AKSAN olarak kaldı (birincil düğme, aktif çipler, canlı); zemin/yüzeyler
+     NÖTR sıcak-gri tonlarına çekildi ve bir ton daha aydınlatıldı. */
+  --accent: #d93548;
   --accent-hi: #ff7080;
   --ink: #fff6f7;
-  /* #24 sonrası kullanıcı raporu: eski #1c0b10 çok karanlıktı — zemin ve
-     yüzeyler bir ton açıldı, kırmızı DETAYLAR (aksan) aynen kaldı. */
-  --bg: #2d1218;
-  --surface: #3b1a22;
-  --surface-2: #472029;
-  --surface-3: #532631;
-  --line: rgba(255, 170, 180, 0.16);
-  --line-strong: rgba(255, 170, 180, 0.27);
-  --text: #fff5f6;
-  --muted: #cfa3ac;
-  --muted-2: #ad838d;
+  --bg: #292124;
+  --surface: #362b2f;
+  --surface-2: #403338;
+  --surface-3: #4b3c41;
+  --line: rgba(240, 226, 226, 0.11);
+  --line-strong: rgba(240, 226, 226, 0.2);
+  --text: #faf5f5;
+  --muted: #bfb0b2;
+  --muted-2: #9d8d90;
 }
 
 /* Beyaz mürekkeple hover'daki açık kırmızı (--accent-hi) okunmaz → TSL'de
@@ -205,9 +207,11 @@ body.league-tsl .btn.primary:hover:not(:disabled) {
   background: #c21c33;
 }
 
+/* Marka noktası: sadeleştirildi — kırmızı dolgu yerine nötr yüzey +
+   kırmızı nokta detayı (göz yormayan tek kırmızı dokunuş). */
 body.league-tsl .brand-mark {
-  background: linear-gradient(135deg, var(--accent), #d92c42);
-  box-shadow: 0 6px 18px rgba(255, 74, 94, 0.25);
+  background: linear-gradient(135deg, #554247, #3d3135);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 /* Kompakt takvim barı (#24 sonrası): ilk açılışta maçlar fold dışında
@@ -248,9 +252,17 @@ body.league-tsl .brand-mark {
   font-weight: 600;
 }
 
+/* Açılır ok: glif yerine CSS çeyrek-oku (kullanıcı raporu: ⌄ küçük ve
+   ortalı değildi) — 45° döndürülmüş kenar çizgisi her zaman optik ortalı. */
 .cal-compact-chevron {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-right: 2.5px solid currentColor;
+  border-bottom: 2.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -2px);
   color: var(--muted);
-  font-size: 14px;
+  margin-left: 2px;
 }
 
 /* Topbar'da küresel lig değiştirici (#21): topbar-inner altında ikinci
