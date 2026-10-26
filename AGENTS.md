@@ -114,6 +114,11 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
 12. **`template()` kökünde ternary YASAK** (vurulduk, #20 U4): `return cond ?
     <A/> : <B/>` sessizce boş yorum düğümleri üretir (`<!--0-->`, hata yok).
     Tek kök div + içerde koşullu içerik (bkv. EditorRow akordiyon).
+13. **Function default export'lu `.tsx` dosyasında local JSX class olmaz**
+    (vurulduk, #21): default export function component ise ve aynı dosyada
+    template()'li local class varsa default component sessizce boş render
+    eder + class prop'larında TypeError. Default export'u class yap
+    (bkv. AccuracyTable; upstream madde 10).
 
 ## Sözleşmeler
 

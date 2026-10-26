@@ -118,9 +118,26 @@ event yarışı, ertelenmiş patch yok — ezilecek hiçbir şey yok. (Ara
 denemelerde src binding'i — statik dahi — imperatif atamadan SONRA gelip
 şeffaf GIF ile ezdiği gözlemlendi.)
 
+## 10. Function default export + yanında local JSX class: sessiz boş render (#21 Faz 3)
+
+Bir `.tsx` dosyasında default export **function component** ise ve aynı
+dosyada JSX döndüren bir **local class** (template()'li, export'suz) da
+varsa, default component sessizce boş render ediyor; ayrıca class'ın
+prop erişimlerinde `props.rows` tarzı TypeError patlıyor (#21 Faz 3'te
+DataTab ve AccuracyTable'da vuruldu — function default export + local
+`class … extends Component` kombinasyonu).
+
+Varyant olasılığı: derleyici dosyayı işlerken default function'ı JSX
+fabrikası olarak işaretliyor ama local class'ın ürettiği ek derleme
+çıkışıyla karışıyor (madde 2'nin named-export varyantına benzer kapsam
+karışıklığı; tam mekanizma repro bekliyor).
+
+Workaround (projede uygulanan): default export'u **class component**
+yap; local class zaten class ile uyumlu. Kural AGENTS.md kısıt 13'te.
+
 ## Bildirim planı
 
 Bu dosya hazırlanma nedeni: dashersw/gea reposuna issue açılmadan önce
 kayıt tutmak. Issue açma kararı ve zamanlaması kullanıcıya aittir; her madde
-tek başına minimal repro ile 10 satırda gösterilebilir. Madde 1, 2 ve 9 en
-yüksek öncelik (sessiz failure üretiyorlar).
+tek başına minimal repro ile 10 satırda gösterilebilir. Madde 1, 2, 9 ve 10
+en yüksek öncelik (sessiz failure üretiyorlar).
