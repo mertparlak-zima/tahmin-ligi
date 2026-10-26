@@ -1,23 +1,18 @@
-// Geçici aktif test oyuncusu yönetimi (API üzerinden; şifre yazdırılmaz).
+// Geçici test oyuncusu yönetimi (public API üzerinden; #24 Faz 1 — şifre yok).
 // Kullanım: node --env-file=.env scripts/test-player.mjs create|passive|list
-import { setTimeout as sleep } from 'node:timers/promises'
+// Not: oyuncu listesi public /api/league payload'ından gelir (yalnız AKTİF
+// oyuncular). Pasif kalan "Test Aktif" public listede görünmez; create yine
+// benzersizlik hatası verir — o durumda list/db'den elle bakın.
 
 const BASE = process.env.BROWSER_CHECK_URL || 'http://localhost:8787'
-const PASSWORD = process.env.ADMIN_PASSWORD
 const NAME = 'Test Aktif'
 const cmd = process.argv[2] ?? 'list'
-
-if (!PASSWORD) {
-  console.error('ADMIN_PASSWORD yok')
-  process.exit(1)
-}
 
 const api = async (path, options = {}) => {
   const res = await fetch(BASE + path, {
     ...options,
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${PASSWORD}`,
       ...(options.headers ?? {}),
     },
   })
@@ -26,7 +21,7 @@ const api = async (path, options = {}) => {
 }
 
 const listPlayers = async () => {
-  const r = await api('/api/admin/bootstrap')
+  const r = await api('/api/league')
   return r.body?.players ?? []
 }
 
@@ -34,30 +29,23 @@ if (cmd === 'create') {
   const existing = await listPlayers()
   const found = existing.find(p => p.name === NAME)
   if (found) {
-    if (found.isActive) {
-      console.log('zaten aktif:', found.id, found.name)
-      process.exit(0)
-    }
-    const r = await api('/api/admin/players', { method: 'PATCH', body: JSON.stringify({ id: found.id, isActive: true }) })
-    console.log('aktifleştirildi:', r.status, found.id)
+    console.log('zaten aktif listede:', found.id, found.name)
     process.exit(0)
   }
-  const r = await api('/api/admin/players', { method: 'POST', body: JSON.stringify({ name: NAME, color: '#b8f34a' }) })
-  console.log('oluşturuldu:', r.status, r.body?.player?.id ?? r.body?.id ?? '')
+  const r = await api('/api/players', { method: 'POST', body: JSON.stringify({ name: NAME, color: '#b8f34a' }) })
+  console.log('oluşturuldu:', r.status, r.body?.player?.id ?? r.body?.error ?? '')
   process.exit(r.ok ? 0 : 1)
 }
 
 if (cmd === 'passive') {
   const targets = (await listPlayers()).filter(p => p.name === NAME)
+  if (!targets.length) console.log('bulunamadı (aktif listede yok)')
   for (const p of targets) {
-    if (!p.isActive) continue
-    const r = await api('/api/admin/players', { method: 'PATCH', body: JSON.stringify({ id: p.id, isActive: false }) })
+    const r = await api('/api/players', { method: 'PATCH', body: JSON.stringify({ id: p.id, isActive: false }) })
     console.log('pasife alındı:', r.status, p.id)
-    await sleep(300)
   }
-  if (!targets.length) console.log('bulunamadı')
   process.exit(0)
 }
 
-const r = await api('/api/admin/bootstrap')
-console.log(JSON.stringify((r.body?.players ?? []).map(p => ({ id: p.id, name: p.name, isActive: p.isActive })), null, 1))
+const r = await api('/api/league')
+console.log(JSON.stringify((r.body?.players ?? []).map(p => ({ id: p.id, name: p.name })), null, 1))
