@@ -1,7 +1,7 @@
 // Lig verisi: yükleme, adaptif polling, görünüm filtreleri, ay takvimi (#19).
 
 import { Store } from '@geajs/core'
-import { dateKey, todayKey } from '../utils/format'
+import { dateKey, todayKey, shiftDay } from '../utils/format'
 import {
   monthMatrix,
   parseMonthKey,
@@ -22,6 +22,14 @@ const CACHE_KEY = 'tahminligi.league.cache.v2'
 const CACHE_MAX_AGE_MS = 12 * 3600_000
 /** #21 Faz 2: seçili lig tercihi localStorage'da kalıcı. */
 const LEAGUE_PREF_KEY = 'tahminligi.league'
+
+/** #21 Faz 3: kickoff'ın ISO haftasının pazartesi (hafta başı) gün anahtarı —
+ *  İstanbul saat diliminde dateKey üzerinden (12:00 ile güvenli parse). */
+function isoMondayKey(iso: string): string {
+  const day = dateKey(iso)
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay() // 0 = pazar
+  return shiftDay(day, -((weekday + 6) % 7))
+}
 
 class LeagueStore extends Store {
   /** #21 Faz 2: seçili lig ('EU' | 'TSL'); localStorage'dan okunur, switchLeague'de yazılır. */
@@ -53,6 +61,11 @@ class LeagueStore extends Store {
   /** Ay takviminin sezon payload önbelleği (sezon başına tek fetch) —
    *  anahtar `${lig}:${sezon}` (#21). */
   private monthSeasonCache: Record<string, any> = {}
+  /** #21 Faz 3: İsabet Şampiyonası — diğer aktif ligin payload önbelleği
+   *  (oturum başına tek fetch; anahtar lig kodu; kalıcı edilmez). */
+  private otherLeagueCache: Record<string, any> = {}
+  accuracyLoading = false
+  accuracyError: string | null = null
 
   selectedDate = ''
   statusFilter: StatusFilter = 'all'
@@ -202,6 +215,7 @@ class LeagueStore extends Store {
     this.error = null
     this.archiveError = null
     this.calendarError = null
+    this.accuracyError = null
     this.etag = ''
     this.archiveCache = {}
     this.monthSeasonCache = {}
@@ -459,6 +473,106 @@ class LeagueStore extends Store {
    *  değiştirici gizli). Türetme store getter'ında (Gea kuralı 7). */
   get leagueOptions(): Array<{ code: string; name: string }> {
     return this.data?.meta?.leagues ?? []
+  }
+
+  // --- #21 Faz 3: İsabet Şampiyonası + Haftanın Tahmincisi ---
+
+  /** Aktif ligin dışındaki ilk aktif lig (İsabet Şampiyonası'nın ikinci
+   *  sütunu); tek ligli payload'da '' → görünüm gizli kalır. */
+  get otherLeagueCode(): string {
+    const option = this.leagueOptions.find(lg => lg.code !== this.league)
+    return option?.code ?? ''
+  }
+
+  /** Diğer ligin payload'ı — oturum başına tek fetch (otherLeagueCache).
+   *  Başarısızlıkta hata yazılır; yeniden deneme düğmesi tekrar çağırır. */
+  async ensureOtherLeague() {
+    const code = this.otherLeagueCode
+    if (!code || this.otherLeagueCache[code]) return
+    this.accuracyLoading = true
+    this.accuracyError = null
+    try {
+      const res = await fetch(`/api/league?league=${encodeURIComponent(code)}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
+      this.otherLeagueCache[code] = await res.json()
+    } catch (err: any) {
+      this.accuracyError = err?.message ?? 'Lig verisi alınamadı.'
+    } finally {
+      this.accuracyLoading = false
+    }
+  }
+
+  /** İsabet Şampiyonası: iki ligin puan satırları oyuncu id'de birleşir.
+   *  Sıralama: genel isabet (totalCorrect/totalPlayed) desc → doğru sayısı
+   *  desc → isim (tr). Türetme tamamen getter'da (Gea kuralı 7). */
+  get accuracyChampionship(): any[] {
+    const otherCode = this.otherLeagueCode
+    const other = otherCode ? this.otherLeagueCache[otherCode] : null
+    if (!this.data || !other) return []
+    const rows = new Map<string, any>()
+    const mergeLeague = (code: string, standings: any[]) => {
+      for (const row of standings) {
+        const merged = rows.get(row.id) ?? {
+          id: row.id,
+          name: row.name,
+          color: row.color,
+          initials: row.initials,
+          avatarUrl: row.avatarUrl ?? null,
+          stats: {},
+          totalPlayed: 0,
+          totalCorrect: 0,
+        }
+        merged.stats[code] = { played: row.played, correct: row.correctOutcomes, accuracy: row.accuracy }
+        merged.totalPlayed += row.played
+        merged.totalCorrect += row.correctOutcomes
+        rows.set(row.id, merged)
+      }
+    }
+    mergeLeague(this.league, this.data.standings ?? [])
+    mergeLeague(otherCode, other.standings ?? [])
+    const list = [...rows.values()].map(row => ({
+      ...row,
+      general: row.totalPlayed > 0 ? Math.round((row.totalCorrect / row.totalPlayed) * 100) : 0,
+    }))
+    list.sort((a, b) => {
+      if (b.general !== a.general) return b.general - a.general
+      if (b.totalCorrect !== a.totalCorrect) return b.totalCorrect - a.totalCorrect
+      return a.name.localeCompare(b.name, 'tr')
+    })
+    return list.map((row, index) => ({ ...row, rank: index + 1 }))
+  }
+
+  /** Haftanın tahmincisi: bitmiş maçların EN SON ISO haftasında (pazartesi
+   *  başlangıç) en çok doğru tahmin yapan oyuncu(lar). Doğru yoksa null. */
+  get weeklyTop(): { names: string[]; correctCount: number; weekStart: string; weekEnd: string } | null {
+    const finished = this.finishedMatches
+    if (finished.length === 0) return null
+    let latestWeek = ''
+    for (const match of finished) {
+      const week = isoMondayKey(match.kickoff)
+      if (week > latestWeek) latestWeek = week
+    }
+    const namesById = new Map<string, string>()
+    const counts = new Map<string, number>()
+    for (const match of finished) {
+      if (isoMondayKey(match.kickoff) !== latestWeek) continue
+      for (const pred of match.predictions ?? []) {
+        namesById.set(pred.playerId, pred.name)
+        if (pred.correct === true) counts.set(pred.playerId, (counts.get(pred.playerId) ?? 0) + 1)
+      }
+    }
+    let best = 0
+    for (const value of counts.values()) {
+      if (value > best) best = value
+    }
+    if (best === 0) return null
+    const names: string[] = []
+    for (const entry of counts.entries()) {
+      if (entry[1] !== best) continue
+      names.push(namesById.get(entry[0]) ?? 'Oyuncu')
+    }
+    names.sort((a, b) => a.localeCompare(b, 'tr'))
+    return { names, correctCount: best, weekStart: latestWeek, weekEnd: shiftDay(latestWeek, 6) }
   }
 
   /** Podyum sırası: 2.-1.-3. */

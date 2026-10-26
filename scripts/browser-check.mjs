@@ -293,12 +293,49 @@ if ((await tslSegment.count()) > 0) {
   check('TSL puan tablosunda FB sütunu yok', (await page.locator('.standings-table th', { hasText: 'FB' }).count()) === 0)
   const accCells = await page.locator('.standings-table td.acc-col').count()
   check('TSL satırlarında isabet değeri', accCells > 0, `${accCells} hücre`)
+
+  // #21 Faz 3: Haftanın tahmincisi bandı — TSL demo tohumu bitmiş maçlara
+  // doğru tahminler eker; son ISO haftasında garanti görünür.
+  const weeklyChip = page.locator('.weekly-top')
+  check('haftanın tahmincisi bandı', (await weeklyChip.count()) === 1, String((await weeklyChip.textContent()) ?? '').trim().slice(0, 56))
+
+  // #21 Faz 3: İsabet Şampiyonası segmenti + birleşik tablo (EU % / TSL % / Genel %).
+  const champSeg = page.locator('.standings-view-switch .seg-item', { hasText: 'İsabet Şampiyonası' })
+  check('isabet şampiyonası segmenti render', (await champSeg.count()) === 1)
+  await champSeg.click()
+  await page.waitForTimeout(1500) // diğer ligin payload'ı tek seferliğine çekilir
+  check('isabet tablosu EU % sütunu', (await page.locator('.accuracy-table th', { hasText: 'EU %' }).count()) === 1)
+  check('isabet tablosu TSL % sütunu', (await page.locator('.accuracy-table th', { hasText: 'TSL %' }).count()) === 1)
+  check('isabet tablosu Genel % sütunu', (await page.locator('.accuracy-table th', { hasText: 'Genel %' }).count()) === 1)
+  const accRows = await page.locator('.accuracy-table tbody tr').count()
+  check('isabet tablosu birleşik satırlar', accRows > 0, `${accRows} satır`)
+  await page.locator('.standings-view-switch .seg-item', { hasText: 'Lig' }).first().click()
+  await page.waitForTimeout(500)
+  check('lig görünümüne dönüş', (await page.locator('.standings-table').count()) === 1)
   const tslLogo = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage)
   check('TSL soluk zemin logosu', tslLogo.includes('/logos/tsl.svg'), String(tslLogo).slice(0, 64))
   // TSL tek turnuva → kupalar seçici gizli olmalı.
   await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
   await page.waitForTimeout(700)
   check('TSL kupalar seçici gizli', (await page.locator('.filter-bar .comp-select').count()) === 0)
+
+  // #21 Faz 3: TSL form çipleri — 4 büyük dışı takımlı maçın akordiyonunda
+  // takım form çipleri (payload home.form/away.form; buildTeamForms tüm
+  // takımları kapsar). Tohum maçları Samsunspor/Konyaspor/Başakşehir garantiler.
+  const tslRows = page.locator('.match-row')
+  const nonBig4Row = tslRows.filter({ hasText: /Samsunspor|Konyaspor|Başakşehir/ }).first()
+  const formRowTarget = (await nonBig4Row.count()) > 0 ? nonBig4Row : tslRows.first()
+  if ((await formRowTarget.count()) > 0) {
+    const formRowText = String((await formRowTarget.textContent()) ?? '')
+    await formRowTarget.click()
+    await page.waitForTimeout(500)
+    const formChips = await page.locator('.match-acc-body .form-chips').count()
+    check('TSL maç akordiyonunda form çipleri', formChips > 0, `${formChips} çip seti · ${formRowText.trim().slice(0, 40)}`)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  } else {
+    check('TSL maç akordiyonunda form çipleri', false, 'maç satırı yok')
+  }
   await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
   await page.waitForTimeout(600)
   // Avrupa'ya dön: tema + FB sütunu + logo geri gelmeli.
@@ -421,6 +458,56 @@ if (await loginInput.count() > 0) {
     check('akordiyon açılınca oyuncu satırları', false, 'akordiyon başlığı yok')
   }
 
+  // --- #21 Faz 3: admin lig seçici — editör günleri Süper Lig'e döner ---
+  const tslAdminSeg = page.locator('.admin-league-switch .seg-item', { hasText: 'Süper Lig' })
+  check('admin lig seçici render', (await tslAdminSeg.count()) === 1)
+  await tslAdminSeg.click()
+  await page.waitForTimeout(1500)
+  check('admin lig bağlamı Süper Lig', String((await page.locator('.admin-league-context').textContent()) ?? '').includes('Süper Lig'))
+  const tslEditorText = String((await page.locator('.admin-preds').textContent()) ?? '')
+  check('admin editör Süper Lig takımlarına döner', /Samsunspor|Başakşehir/.test(tslEditorText), 'tohum takımları görünmüyor')
+
+  // --- #21 Faz 3: hızlı tahmin girişi — boş açık maçlara taslak basar ---
+  const quickChips = page.locator('.acc-chip')
+  if ((await quickChips.count()) > 1) {
+    await quickChips.nth(1).click() // ilk oyuncu çipi (0 = Tümü)
+    await page.waitForTimeout(400)
+    const quickRow = await page.locator('.quick-fill').count()
+    check('hızlı giriş satırı görünür', quickRow === 1)
+    if (quickRow === 1) {
+      // Oyuncunun taslağı boş bir maç bul ve aç (tohum tahminli maçlar dolu).
+      let openedEmpty = false
+      const headTotal = await page.locator('.acc-head').count()
+      for (let i = 0; i < Math.min(headTotal, 6); i += 1) {
+        const head = page.locator('.acc-head').nth(i)
+        if ((await head.getAttribute('aria-expanded')) !== 'true') {
+          await head.click()
+          await page.waitForTimeout(400)
+        }
+        const openSel = page.locator('.acc-item.open .acc-pred-select').first()
+        if ((await openSel.count()) > 0 && (await openSel.inputValue()) === '') {
+          openedEmpty = true
+          break
+        }
+      }
+      const dirtyBefore = await page.locator('.acc-item.open .acc-pred-row.dirty').count()
+      await page.locator('.quick-fill .btn', { hasText: 'Ev sahibi' }).click()
+      await page.waitForTimeout(500)
+      const dirtyAfter = await page.locator('.acc-item.open .acc-pred-row.dirty').count()
+      check('hızlı giriş boş taslakları doldurur', openedEmpty ? dirtyAfter === dirtyBefore + 1 : true, openedEmpty ? `${dirtyAfter} kirli satır` : 'boş maç bulunamadı — atlandı')
+      check('hızlı giriş satırı dolunca gizlenir', (await page.locator('.quick-fill').count()) === 0)
+    }
+    await quickChips.nth(1).click() // filtre temizle
+    await page.waitForTimeout(300)
+  } else {
+    console.log('  bilgi: oyuncu çipi yok → hızlı giriş testi atlandı')
+  }
+
+  // Avrupa'ya dönüş — bağlam + editör geri döner.
+  await page.locator('.admin-league-switch .seg-item', { hasText: 'Avrupa' }).click()
+  await page.waitForTimeout(1500)
+  check('admin Avrupa dönüşü', String((await page.locator('.admin-league-context').textContent()) ?? '').includes('Avrupa'))
+
   // oyuncular sekmesi
   await page.locator('.admin-tab', { hasText: 'Oyuncular' }).click()
   await page.waitForTimeout(500)
@@ -501,6 +588,10 @@ if (await loginInput.count() > 0) {
     } catch {
       check('manuel senkron toastı', false, '25s içinde toast görünmedi')
     }
+    // #21 Faz 3: senkron yanıtı lig bazlı `leagues` detayı taşır → satırlar.
+    await page.waitForTimeout(600)
+    const leagueLines = await page.locator('.sync-league-line').count()
+    check('senkron lig bazlı satırlar', leagueLines === 2, `${leagueLines} satır`)
   } else {
     check('manuel senkron toastı', false, 'senkron düğmesi yok')
   }

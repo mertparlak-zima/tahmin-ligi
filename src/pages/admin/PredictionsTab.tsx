@@ -46,6 +46,24 @@ export default class PredictionsTab extends Component {
           ))}
         </div>
 
+        {/* #21 Faz 3: hızlı tahmin girişi — oyuncu filtresi setse VE boş
+            (taslaksız + kayıtsız) açık maç varsa görünür. Koşul doğrudan
+            store okumasıyla (Gea kuralı 11). */}
+        {adminStore.playerFilter !== '' && adminStore.quickFillCount > 0 ? (
+          <div class="quick-fill" role="group" aria-label="Hızlı tahmin girişi">
+            <span class="quick-fill-label">Boş tahminlere ({adminStore.quickFillCount}):</span>
+            <button class="btn ghost sm" aria-label="Boş tahminlere ev sahibi yaz" click={() => adminStore.quickFill('H')}>
+              Ev sahibi
+            </button>
+            <button class="btn ghost sm" aria-label="Boş tahminlere beraberlik yaz" click={() => adminStore.quickFill('D')}>
+              Beraberlik
+            </button>
+            <button class="btn ghost sm" aria-label="Boş tahminlere deplasman yazar" click={() => adminStore.quickFill('A')}>
+              Deplasman
+            </button>
+          </div>
+        ) : null}
+
         <div class="admin-toolbar">
           <button class="btn ghost sm" click={() => adminStore.toggleLocked()}>
             {adminStore.showLocked

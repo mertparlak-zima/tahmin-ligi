@@ -39,6 +39,10 @@ class AdminStore extends Store {
   loading = false
   error: string | null = null
 
+  /** #21 Faz 3: panelin gösterdiği lig ('EU' | 'TSL'). Panel verisi bu ligin
+   *  maçlarına iner (bootstrap ?league=); puanlama kuralı küreseldir. */
+  league: string = 'EU'
+
   tab = 'predictions'
   showLocked = false
   // #20 U4: taslaklar 'playerId:matchId' anahtarlı (payload predictionMap ile
@@ -54,6 +58,9 @@ class AdminStore extends Store {
 
   syncRunning = false
   playerForm = { name: '', color: '#b8f34a' }
+  /** #21 Faz 3: son manuel senkron yanıtı — lig bazlı `leagues` detayı
+   *  DataTab'da satır satır gösterilir (aggregate alanlar toasta gider). */
+  lastSync: any = null
 
   // --- Avatar editörü (#17) ---
   avatarEditorOpen = false
@@ -96,13 +103,14 @@ class AdminStore extends Store {
     this.baseline = {}
     this.openMatchId = null
     this.playerFilter = ''
+    this.league = 'EU'
     sessionStorage.removeItem(ADMIN_KEY)
   }
 
   async bootstrap() {
     this.loading = true
     try {
-      this.data = await api('/api/admin/bootstrap')
+      this.data = await api(`/api/admin/bootstrap?league=${encodeURIComponent(this.league)}`)
       this.error = null
       this.resetDrafts()
     } catch (err: any) {
@@ -111,6 +119,21 @@ class AdminStore extends Store {
     } finally {
       this.loading = false
     }
+  }
+
+  /** #21 Faz 3: panel ligini değiştirir. Aynı ligde no-op. Taslak/baseline,
+   *  açık akordiyon, oyuncu filtresi ve hata temizlenir; eski ligin verisi
+   *  parlamasın diye data=null → iskelet; ardından yeni lig çekilir. */
+  switchLeague(code: string) {
+    if (code === this.league || (code !== 'EU' && code !== 'TSL')) return
+    this.league = code
+    this.drafts = {}
+    this.baseline = {}
+    this.openMatchId = null
+    this.playerFilter = ''
+    this.error = null
+    this.data = null
+    this.bootstrap()
   }
 
   /** Admin payload predictions zaten pid:mid → outcome haritası; tam düz
@@ -145,6 +168,49 @@ class AdminStore extends Store {
     this.drafts[`${playerId}:${matchId}`] = outcome
   }
 
+  /** #21 Faz 3: hızlı giriş — filtreli oyuncunun, taslağı da kaydı da olmayan
+   *  açık maçlarının sayısı (düğmelerin görünürlüğü + etiketindeki sayı). */
+  get quickFillCount(): number {
+    if (!this.playerFilter) return 0
+    let count = 0
+    for (const match of this.editorMatches) {
+      if ((this.drafts[`${this.playerFilter}:${match.id}`] ?? '') === '') count++
+    }
+    return count
+  }
+
+  /** Boş taslaklı açık maçlara H/D/A basar (hızlı giriş). Sonradan her satır
+   *  tek tek düzenlenebilir; kaydetme akışı (yalnız kirli satırlar) aynı. */
+  quickFill(outcome: string) {
+    if (!this.playerFilter) return
+    if (outcome !== 'H' && outcome !== 'D' && outcome !== 'A') return
+    for (const match of this.editorMatches) {
+      const key = `${this.playerFilter}:${match.id}`
+      if ((this.drafts[key] ?? '') === '') this.drafts[key] = outcome
+    }
+  }
+
+  /** #21 Faz 3: son senkron yanıtındaki lig bazlı sonuçlar (satır bileşenine
+   * hazır nesne dizisi; türetme getter'da — Gea kuralı 7). */
+  get lastSyncLeagues(): Array<{
+    code: string; name: string; ok: boolean; seen: number; changed: number; complete: boolean; error: string | null
+  }> {
+    const leagues = this.lastSync?.leagues ?? null
+    if (!leagues) return []
+    return Object.keys(leagues).map(code => {
+      const info = leagues[code] ?? {}
+      return {
+        code,
+        name: this.leagueNameOf(code),
+        ok: info.ok === true,
+        seen: info.matchesSeen ?? 0,
+        changed: info.changed ?? 0,
+        complete: info.complete === true,
+        error: info.error ?? null,
+      }
+    })
+  }
+
   isDirty(matchId: string, playerId: string): boolean {
     const key = `${playerId}:${matchId}`
     return (this.drafts[key] ?? '') !== (this.baseline[key] ?? '')
@@ -166,6 +232,25 @@ class AdminStore extends Store {
       if (comp.code === code) return comp.name
     }
     return code
+  }
+
+  /** #21 Faz 3: panel lig seçeneği (lib/targets.js LEAGUES kayıt defteriyle
+   *  aynı kod/ad; türetme store getter'ında — Gea kuralı 7). */
+  get leagueOptions(): Array<{ code: string; name: string }> {
+    return [
+      { code: 'EU', name: 'Avrupa' },
+      { code: 'TSL', name: 'Süper Lig' },
+    ]
+  }
+
+  /** Lig kodunun görünen adı (bilinmeyen kod kodun kendisi). */
+  leagueNameOf(code: string): string {
+    const option = this.leagueOptions.find(lg => lg.code === code)
+    return option?.name ?? code
+  }
+
+  get leagueName(): string {
+    return this.leagueNameOf(this.league)
   }
 
   get openMatchCount(): number {
@@ -395,6 +480,7 @@ class AdminStore extends Store {
     this.syncRunning = true
     try {
       const result = await api('/api/admin/sync', { method: 'POST' })
+      this.lastSync = result
       uiStore.toast(`Senkronizasyon tamam: ${result.matchesSeen} maç, ${result.changed} değişiklik.`)
       await this.bootstrap()
     } catch (err: any) {
