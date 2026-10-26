@@ -114,6 +114,11 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
 12. **`template()` kökünde ternary YASAK** (vurulduk, #20 U4): `return cond ?
     <A/> : <B/>` sessizce boş yorum düğümleri üretir (`<!--0-->`, hata yok).
     Tek kök div + içerde koşullu içerik (bkv. EditorRow akordiyon).
+13. **Function default export'lu `.tsx` dosyasında local JSX class olmaz**
+    (vurulduk, #21): default export function component ise ve aynı dosyada
+    template()'li local class varsa default component sessizce boş render
+    eder + class prop'larında TypeError. Default export'u class yap
+    (bkv. AccuracyTable; upstream madde 10).
 
 ## Sözleşmeler
 
@@ -125,6 +130,12 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
   (kimin tahmin girdiği görünür). Bu kural UI'a değil API'ye ait.
 - **Senkron**: cron yok; `/api/league` bayat veriyi görünce ESPN'den çeker.
   Bitmiş maç geri alınmaz; kaynak hatasında eski veri korunur.
+- **Yeni lig**: `lib/targets.js` içindeki `LEAGUES` kayıt defterine kayıt
+  eklenerek açılır; ESPN kaynak slug'ları `lib/espn.js` `LEAGUE_SOURCES`'ta
+  tanımlanır (lig kodu → slug/turnuva eşlemesi). Kayıt defteri sunucu
+  tarafını açar; istemcide DE `leagueStore`/`adminStore` `switchLeague`
+  bekçileri ve `AccuracyTable` kolonları elle güncellenmelidir (iki lig
+  'EU'|'TSL' sabitidir — üçüncü lig src işi gerektirir).
 - **Gea skill'leri** `.agents/skills/` altında; yeni Gea kodu yazmadan
   `gea-framework` skill'ini oku.
 - **CI ve Runner**: Tüm CI koşuları (`ci.yml`) GitHub-hosted yerine yerel self-hosted Docker runner (`tahmin-ligi-docker-1`, label `[self-hosted, linux, x64, docker, tahmin-ligi]`, `infra/runner/compose.yml`, başlatma `scripts/start-ci-runner.ps1`) üzerinde çalışır. GitHub-hosted runner kullanımı yasaktır.

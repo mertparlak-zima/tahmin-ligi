@@ -425,7 +425,16 @@ suite.test('meta.season/seasons/leagues: seçili ligin sezonları desc sıralan�
     { year: SY, label: labelOf(SY) },
     { year: SY - 1, label: labelOf(SY - 1) },
   ], 'sezonlar desc; seçili ligin tüm sezonları')
-  assert.deepEqual(p.meta.leagues, [{ code: 'EU', name: 'Avrupa', active: true }], 'meta.leagues aktif kayıtlar')
+  // #21: iki aktif lig — EU ilk (varsayılan), TSL ikinci.
+  assert.deepEqual(p.meta.leagues, [
+    { code: 'EU', name: 'Avrupa', active: true },
+    { code: 'TSL', name: 'Süper Lig', active: true },
+  ], 'meta.leagues aktif kayıtlar')
+  assert.deepEqual(p.competitions, [
+    { code: 'CL', name: 'UEFA Şampiyonlar Ligi' },
+    { code: 'EL', name: 'UEFA Avrupa Ligi' },
+    { code: 'UECL', name: 'UEFA Konferans Ligi' },
+  ], 'EU competitions listesi lig kapsamında')
   assert.deepEqual(p.matches.map(m => m.id), ['s-new'], 'varsayılan payload yalnız aktif sezonu taşır')
 
   const oldP = await buildLeaguePayload(supM, { seasonYear: SY - 1 })
@@ -484,9 +493,109 @@ suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonlu
 
 suite.test('bilinmeyen lig kodu hata fırlatır (api 400 kaynağı)', async () => {
   await assert.rejects(
-    () => buildLeaguePayload(createMemorySupabase(), { league: 'TSL' }),
+    () => buildLeaguePayload(createMemorySupabase(), { league: 'XX' }),
     /Bilinmeyen lig/,
   )
+})
+
+// --- #21 Süper Lig: lig izolasyonu + lig bazlı bonus ---
+
+const tslRow = o => row({ ...o, league: 'TSL', competition: 'TSL' })
+
+suite.test('#21 TSL: standings yalnız TSL maçlarından; EU tablosu etkilenmez', async () => {
+  const supT = createMemorySupabase({
+    players: [
+      { id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true },
+      { id: 'q2', name: 'Bora', color: '#5ce1e6', is_active: true },
+    ],
+    matches: [
+      row({
+        id: 'eu1', external_id: 'e1', competition: 'CL', kickoff: iso(now - 96 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Barcelona', away_short: 'Barcelona',
+        home_score: 1, away_score: 4,
+      }),
+      tslRow({
+        id: 't1', external_id: 't1', kickoff: iso(now - 48 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Samsunspor', away_short: 'Samsunspor',
+        home_score: 2, away_score: 0, matchday: null,
+      }),
+      tslRow({
+        id: 't2', external_id: 't2', kickoff: iso(now + 24 * hour), status: 'TIMED',
+        home_name: 'Başakşehir', home_short: 'Başakşehir',
+        away_name: 'Fenerbahçe', away_short: 'Fenerbahçe',
+        home_score: null, away_score: null,
+      }),
+    ],
+    predictions: [
+      { player_id: 'q1', match_id: 'eu1', outcome: 'H' }, // EU'da yanlış
+      { player_id: 'q1', match_id: 't1', outcome: 'H' }, // TSL'de doğru
+      { player_id: 'q2', match_id: 'eu1', outcome: 'A' }, // EU'da doğru
+    ],
+  })
+
+  const tsl = await buildLeaguePayload(supT, { league: 'TSL' })
+  assert.deepEqual(tsl.matches.map(m => m.id).sort(), ['t1', 't2'], 'TSL payload yalnız TSL maçları')
+  assert.equal(tsl.meta.counts.matches, 2)
+  assert.equal(tsl.meta.season.year, SY, 'TSL de aynı sezon takvimini kullanır')
+  assert.deepEqual(tsl.competitions, [{ code: 'TSL', name: 'Süper Lig' }], 'competitions lig kapsamına iner')
+  const st = Object.fromEntries(tsl.standings.map(r => [r.id, r]))
+  assert.equal(st.q1.points, 1, 'TSL doğrusu TSL tablosunda')
+  assert.equal(st.q1.played, 1)
+  assert.equal(st.q2.points, 0, 'EU doğrusu TSL puanına SIZMAZ')
+  assert.equal(st.q2.played, 0)
+  assert.deepEqual(st.q1.teamCorrect, { FB: 0, GS: 1, BJK: 0, TS: 0 }, 'teamCorrect TSL maçından')
+
+  // Aynı veriden EU payload'ı: TSL maçları/sonuçları hiç görünmez.
+  const eu = await buildLeaguePayload(supT, { league: 'EU' })
+  assert.deepEqual(eu.matches.map(m => m.id), ['eu1'], 'EU payload yalnız EU maçları')
+  assert.deepEqual(eu.competitions.map(c => c.code), ['CL', 'EL', 'UECL'], 'EU competitions listesi')
+  const est = Object.fromEntries(eu.standings.map(r => [r.id, r]))
+  assert.equal(est.q2.points, 1, 'EU doğrusu EU tablosunda')
+  assert.equal(est.q1.points, 0, 'TSL doğrusu EU puanına SIZMAZ')
+  assert.deepEqual(est.q1.teamCorrect, { FB: 0, GS: 0, BJK: 0, TS: 0 }, 'TSL doğrusu EU teamCorrect\'e sızmaz')
+
+  // Admin payload da lig kapsamını izler (bootstrap ?league= kaynağı).
+  const admin = await buildAdminPayload(supT, { league: 'TSL' })
+  assert.deepEqual(admin.matches.map(m => m.id).sort(), ['t1', 't2'], 'admin editörü TSL kapsamında')
+  assert.deepEqual(admin.competitions, [{ code: 'TSL', name: 'Süper Lig' }])
+})
+
+suite.test('#21 T3 review: recentPredictions lig kapsamıyla sınırlı — TSL girişi EU akışını iter mi', async () => {
+  const supF = createMemorySupabase({
+    players: [
+      { id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true },
+      { id: 'q2', name: 'Bora', color: '#5ce1e6', is_active: true },
+    ],
+    matches: [
+      row({
+        id: 'eu1', external_id: 'e1', competition: 'CL', kickoff: iso(now - 96 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Barcelona', away_short: 'Barcelona',
+        home_score: 1, away_score: 4,
+      }),
+      tslRow({
+        id: 't1', external_id: 't1', kickoff: iso(now - 48 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Samsunspor', away_short: 'Samsunspor',
+        home_score: 2, away_score: 0, matchday: null,
+      }),
+    ],
+    predictions: [
+      // EU girişi ESKİ, TSL girişi YENİ — global top-30'da TSL başı çekerdi.
+      { player_id: 'q1', match_id: 'eu1', outcome: 'H',
+        created_at: iso(now - 90 * hour), updated_at: iso(now - 90 * hour) },
+      { player_id: 'q1', match_id: 't1', outcome: 'H',
+        created_at: iso(now - 2 * hour), updated_at: iso(now - 2 * hour) },
+    ],
+  })
+
+  const eu = await buildLeaguePayload(supF, { league: 'EU' })
+  assert.deepEqual(eu.recentPredictions.map(r => r.matchId), ['eu1'], 'EU akışı yalnız EU maçı olayı taşır')
+
+  const tsl = await buildLeaguePayload(supF, { league: 'TSL' })
+  assert.deepEqual(tsl.recentPredictions.map(r => r.matchId), ['t1'], 'TSL akışı yalnız TSL maçı olayı taşır')
 })
 
 suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalır', async () => {
@@ -499,9 +608,43 @@ suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalı
   assert.deepEqual(p.meta.seasons.map(s => s.year), [SY], 'sezon listesi seçili ligin mevcut sezonları')
 })
 
+suite.test('#21 bonus: lig bazlı anahtar tercih edilir; eski biçim yalnız EU yedeği', async () => {
+  const seed = extra => createMemorySupabase({
+    players: [{ id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true }],
+    matches: [row({
+      id: 'eu1', external_id: 'e1', competition: 'CL', kickoff: iso(now - 48 * hour), status: 'FINISHED',
+      home_name: 'Galatasaray', home_short: 'Galatasaray',
+      away_name: 'Barcelona', away_short: 'Barcelona',
+      home_score: 2, away_score: 0,
+    })], // tahmin yok → standings puanı = yalnız bonus
+    app_config: [
+      { key: 'scoring', value: { label: 'x', status: 'provisional', correctOutcome: 1 } },
+      ...extra,
+    ],
+  })
+
+  // 1) Her lig kendi lig bazlı anahtarını okur; çapraz sıçrama yok.
+  const supB = seed([
+    { key: `bonus:EU:${SY}`, value: { q1: 2 } },
+    { key: `bonus:TSL:${SY}`, value: { q1: 5 } },
+  ])
+  const eu = await buildLeaguePayload(supB, { league: 'EU' })
+  assert.equal(eu.standings.find(r => r.id === 'q1').points, 2, 'EU bonusu bonus:EU:<sezon>')
+  const tsl = await buildLeaguePayload(supB, { league: 'TSL' })
+  assert.equal(tsl.standings.find(r => r.id === 'q1').points, 5, 'TSL bonusu bonus:TSL:<sezon>')
+
+  // 2) Göç penceresi: bonus:EU yoksa EU eski bonus:<sezon>'a düşer; TSL DÜŞMEZ
+  //    (eski anahtar çoklu lig öncesi EU verisidir — TSL'e sızmamalı).
+  const supL = seed([{ key: `bonus:${SY}`, value: { q1: 7 } }])
+  const euLegacy = await buildLeaguePayload(supL, { league: 'EU' })
+  assert.equal(euLegacy.standings.find(r => r.id === 'q1').points, 7, 'EU eski anahtara düşer (göç güvenliği)')
+  const tslLegacy = await buildLeaguePayload(supL, { league: 'TSL' })
+  assert.equal(tslLegacy.standings.find(r => r.id === 'q1').points, 0, 'TSL eski (EU) bonusunu ALMAZ')
+})
+
 suite.test('api /api/league GET: bilinmeyen lig 400, geçersiz sezon 400', async () => {
   const req = q => new Request(`http://localhost:8787/api/league${q}`)
-  const badLeague = await leagueGET(req('?league=TSL'))
+  const badLeague = await leagueGET(req('?league=XX'))
   assert.equal(badLeague.status, 400)
   assert.equal((await badLeague.json()).error, 'Bilinmeyen lig.')
 
@@ -512,7 +655,7 @@ suite.test('api /api/league GET: bilinmeyen lig 400, geçersiz sezon 400', async
   }
 
   // Lig denetimi önce: birleşik hatalı istemde lig mesajı döner.
-  const both = await leagueGET(req('?league=TSL&season=xx'))
+  const both = await leagueGET(req('?league=XX&season=xx'))
   assert.equal((await both.json()).error, 'Bilinmeyen lig.')
 
   const post = await leagueGET(new Request('http://localhost:8787/api/league', { method: 'POST' }))

@@ -15,6 +15,7 @@ export default class ScoringTab extends Component {
           Puanlama kuralı <b>yalnızca veritabanından</b> yönetilir (Supabase →
           app_config → <code>scoring</code>). Burada bilgi amaçlı görünür;
           puanlar her istekte güncel kurala göre yeniden hesaplanır.
+          Puanlama kuralı iki lig için de ortaktır.
         </div>
         <div class="data-grid" style={{ maxWidth: '480px' } as any}>
           <div class="data-item">

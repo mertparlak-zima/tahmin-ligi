@@ -2,6 +2,7 @@
 // Kullanım: node scripts/smoke-sync.mjs
 
 import assert from 'node:assert/strict'
+import { seasonYear } from '../lib/espn.js'
 
 // lib/sync.js ESPN'i çağırır; test için fetchTrackedMatches'i enjekte edemeyiz,
 // bu yüzden sync.js'in çekirdek satırlarını birebir kopyalayan bu test mantığı
@@ -77,7 +78,38 @@ const keep = new Set(incoming.map(m => `${m.provider}:${m.externalId}`))
 const deleteIds = existing.filter(m => !keep.has(`${m.provider}:${m.external_id}`)).map(m => m.id)
 assert.deepEqual(deleteIds, ['e3'], 'takip dışı kalan maç temizlenir')
 
+// --- #21 çoklu lig: prune kapsamı lig bazlıdır ---
+// Her tur TEK lig kapsamında çalışır; silme adayları yalnız o lig + aktif
+// sezon satırlarındandır (sync.js: m.league === league && m.season_year ===
+// activeSeason). Başka ligin satırı yanıtta hiç olmasa bile DOKUNULMAZ.
+const SY = seasonYear()
+const euKeep = new Set(incoming.map(m => `${m.provider}:${m.externalId}`))
+const scopedDeleteIds = (rows, keepSet, league) => rows
+  .filter(m => !keepSet.has(`${m.provider}:${m.external_id}`))
+  .filter(m => m.league === league && m.season_year === SY)
+  .map(m => m.id)
+
+const multiLeagueExisting = [
+  ...existing.map(m => ({ ...m, league: 'EU', season_year: SY })),
+  {
+    id: 'e-tsl', provider: 'espn', external_id: '20', status: 'TIMED', minute: null,
+    kickoff: iso(Date.now() + 48 * hour), home_score: null, away_score: null,
+    home_name: 'Samsunspor', away_name: 'Konyaspor',
+    league: 'TSL', season_year: SY,
+  },
+]
+assert.deepEqual(
+  scopedDeleteIds(multiLeagueExisting, euKeep, 'EU'),
+  ['e3'],
+  'EU turu yalnız EU artığını siler; TSL satırı kalır',
+)
+assert.deepEqual(
+  scopedDeleteIds(multiLeagueExisting, euKeep, 'TSL'),
+  ['e-tsl'],
+  'TSL turu kendi artığını siler; EU satırları kalır',
+)
+
 console.log('Senkronizasyon mantığı testleri geçti ✅')
 console.log('  yazılacak:', rows.map(r => r.externalId).join(', '))
 console.log('  atlanan:', skipped.map(s => `${s.key} (${s.reason})`).join(', '))
-console.log('  silinecek:', deleteIds.join(', '))
+console.log('  silinecek:', deleteIds.join(', '), '| kapsam: EU →', scopedDeleteIds(multiLeagueExisting, euKeep, 'EU').join(', '), '· TSL →', scopedDeleteIds(multiLeagueExisting, euKeep, 'TSL').join(', '))

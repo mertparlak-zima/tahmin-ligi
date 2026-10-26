@@ -2,8 +2,15 @@ import { Link } from '@geajs/core'
 import leagueStore from '../stores/league-store'
 import adminStore from '../stores/admin-store'
 import uiStore from '../stores/ui-store'
+import SegButton from './SegButton'
 import { cn } from '../utils/cn'
 import { fmtTime } from '../utils/format'
+
+/** #21 Faz 2: lige göre marka alt yazısı (statik istemci haritası). */
+const BRAND_SUBTITLES: Record<string, string> = {
+  EU: '4 takım · 3 kupa · arkadaş ligi',
+  TSL: 'Tüm Süper Lig · arkadaş ligi',
+}
 
 export default function TopBar() {
   const meta = leagueStore.data?.meta
@@ -18,7 +25,7 @@ export default function TopBar() {
           </span>
           <div class="brand-text">
             <span class="brand-name">{meta?.leagueName ?? 'Tahmin Ligi'}</span>
-            <span class="brand-sub">4 takım · 3 kupa · arkadaş ligi</span>
+            <span class="brand-sub">{leagueStore.league === 'TSL' ? BRAND_SUBTITLES.TSL : BRAND_SUBTITLES.EU}</span>
           </div>
           {adminStore.authed ? <span class="admin-mode-badge">YÖNETİM</span> : null}
         </Link>
@@ -75,6 +82,24 @@ export default function TopBar() {
           </button>
         </div>
       </div>
+      {/* #21 Faz 2: küresel lig değiştirici — meta.leagues payload'dan gelir,
+          meta yüklenene dek gizli. SegButton deseni; liste doğrudan store
+          getter'ından map'lenir (Gea kuralı 7), active/click store'dan okunur
+          (Gea kuralı 9). */}
+      {leagueStore.leagueOptions.length > 1 ? (
+        <div class="league-switch-row">
+          <div class="segmented league-switch" role="tablist" aria-label="Lig seçimi">
+            {leagueStore.leagueOptions.map(lg => (
+              <SegButton
+                key={lg.code}
+                active={leagueStore.league === lg.code}
+                label={lg.name}
+                onSelect={() => leagueStore.switchLeague(lg.code)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
       {staleOpen ? (
         <div class={cn('stale-band', 'open', stale.level === 'offline' && 'offline')} role="status">
           <span class="stale-dot" aria-hidden="true"></span>

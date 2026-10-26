@@ -24,17 +24,21 @@ export default function FilterBar() {
           />
         ))}
       </div>
-      <select
-        class="comp-select"
-        aria-label="Turnuva"
-        value={leagueStore.competitionFilter}
-        change={e => (leagueStore.competitionFilter = (e.target as HTMLSelectElement).value)}
-      >
-        <option value="all">Tüm kupalar</option>
-        {leagueStore.competitions.map((c: any) => (
-          <CompOption key={c.code} value={c.code} label={c.name} />
-        ))}
-      </select>
+      {/* #21: TSL tek turnuva → kupalar seçici gizli. Koşul template()
+          içinde doğrudan store okumasıyla (Gea kural 11/12). */}
+      {leagueStore.competitions.length > 1 ? (
+        <select
+          class="comp-select"
+          aria-label="Turnuva"
+          value={leagueStore.competitionFilter}
+          change={e => (leagueStore.competitionFilter = (e.target as HTMLSelectElement).value)}
+        >
+          <option value="all">Tüm kupalar</option>
+          {leagueStore.competitions.map((c: any) => (
+            <CompOption key={c.code} value={c.code} label={c.name} />
+          ))}
+        </select>
+      ) : null}
     </div>
   )
 }

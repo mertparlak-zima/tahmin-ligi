@@ -5,6 +5,7 @@ import PlayersTab from './admin/PlayersTab'
 import ScoringTab from './admin/ScoringTab'
 import DataTab from './admin/DataTab'
 import SkeletonCard from '../components/SkeletonCard'
+import SegButton from '../components/SegButton'
 import { cn } from '../utils/cn'
 
 const TABS = [
@@ -76,6 +77,22 @@ export default class AdminPage extends Component {
     return (
       <div class="admin-page">
         <div class="admin-head">
+          {/* #21 Faz 3: panel lig seçici — tüm sekmelerde görünür; liste
+              doğrudan store getter'ından map'lenir (Gea kuralı 7), active/
+              click store'dan okunur (kural 9). TopBar deseninin kopyası. */}
+          <div class="admin-league-row">
+            <div class="segmented admin-league-switch" role="tablist" aria-label="Panel lig seçimi">
+              {adminStore.leagueOptions.map(lg => (
+                <SegButton
+                  key={lg.code}
+                  active={adminStore.league === lg.code}
+                  label={lg.name}
+                  onSelect={() => adminStore.switchLeague(lg.code)}
+                />
+              ))}
+            </div>
+            <span class="admin-league-context">Panel verisi: {adminStore.leagueName}</span>
+          </div>
           <div class="admin-tabs">
             <button class={cn('admin-tab', adminStore.tab === 'predictions' && 'active')} click={() => (adminStore.tab = 'predictions')}>
               Tahminler

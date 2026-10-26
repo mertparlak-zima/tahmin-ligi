@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto'
 
 import { maybeSync } from '../lib/sync.js'
 import { buildLeaguePayload } from '../lib/league.js'
+import { seasonYear } from '../lib/espn.js'
 import { GET as leagueGET } from '../api/league.js'
 import * as admin from '../api/admin.js'
 
@@ -205,6 +206,69 @@ function createMemorySupabase() {
 }
 
 // ----------------------------------------------------------------------
+// #21 TSL demo tohumu: gerçek tur.1 senkronunun yanına birkaç garantili
+// Süper Lig maçı (Samsunspor/Başakşehir/Konyaspor dahil) + tahmin ekler —
+// UI fazında lig değiştirme tarayıcıda denenir. Bellekte kalır, reset'te
+// düşer. Gelecek maçların hepsine tahmin eklenir: tahminli satır sonraki
+// TSL senkron turlarında prune edilmez (senkron koruması).
+// ----------------------------------------------------------------------
+
+const HOUR_MS = 3600_000
+
+async function seedTslDemo(supabase) {
+  const { data: players } = await supabase.from('players').select('*')
+  const active = (players ?? []).filter(p => p.is_active)
+  if (active.length === 0) return 0
+
+  const now = Date.now()
+  const kickoff = ms => new Date(ms).toISOString()
+  const base = {
+    provider: 'espn',
+    competition: 'TSL',
+    status: 'TIMED',
+    minute: null,
+    home_tla: null, away_tla: null, home_crest: null, away_crest: null,
+    home_score: null, away_score: null,
+    matchday: null, stage: null,
+    season_year: seasonYear(),
+    league: 'TSL',
+  }
+  const teams = (home, away, hs, as) => ({
+    home_name: home, home_short: home,
+    away_name: away, away_short: away,
+    home_score: hs, away_score: as,
+  })
+  const matches = [
+    { id: 'demo-tsl-1', ...base, external_id: 'demo-tsl-1', kickoff: kickoff(now - 72 * HOUR_MS), status: 'FINISHED', ...teams('Galatasaray', 'Samsunspor', 3, 1) },
+    { id: 'demo-tsl-2', ...base, external_id: 'demo-tsl-2', kickoff: kickoff(now - 48 * HOUR_MS), status: 'FINISHED', ...teams('Konyaspor', 'Trabzonspor', 1, 1) },
+    { id: 'demo-tsl-3', ...base, external_id: 'demo-tsl-3', kickoff: kickoff(now - 30 * HOUR_MS), status: 'FINISHED', ...teams('Beşiktaş', 'Başakşehir', 2, 0) },
+    { id: 'demo-tsl-4', ...base, external_id: 'demo-tsl-4', kickoff: kickoff(now - 2 * HOUR_MS), status: 'IN_PLAY', minute: 63, ...teams('Fenerbahçe', 'Konyaspor', 1, 0) },
+    { id: 'demo-tsl-5', ...base, external_id: 'demo-tsl-5', kickoff: kickoff(now + 26 * HOUR_MS), ...teams('Başakşehir', 'Fenerbahçe', null, null) },
+    { id: 'demo-tsl-6', ...base, external_id: 'demo-tsl-6', kickoff: kickoff(now + 50 * HOUR_MS), ...teams('Samsunspor', 'Beşiktaş', null, null) },
+    { id: 'demo-tsl-7', ...base, external_id: 'demo-tsl-7', kickoff: kickoff(now + 74 * HOUR_MS), ...teams('Trabzonspor', 'Galatasaray', null, null) },
+  ]
+  await supabase.from('matches').upsert(matches, { onConflict: 'provider,external_id' })
+
+  // Tahminler: bitmişlerde karışık doğruluk, canlıda bir giriş, geleceklerde
+  // her maça en az bir tahmin (prune koruması) — mühür akışı da görünür.
+  const [a, b, c] = active
+  const predictions = [
+    { player_id: a.id, match_id: 'demo-tsl-1', outcome: 'H' }, // doğru (3-1)
+    { player_id: b.id, match_id: 'demo-tsl-1', outcome: 'A' }, // yanlış
+    { player_id: b.id, match_id: 'demo-tsl-2', outcome: 'D' }, // doğru (1-1)
+    { player_id: a.id, match_id: 'demo-tsl-3', outcome: 'H' }, // doğru (2-0)
+    { player_id: c?.id ?? a.id, match_id: 'demo-tsl-3', outcome: 'D' }, // yanlış
+    { player_id: b.id, match_id: 'demo-tsl-4', outcome: 'H' }, // canlı → açılır, puan null
+    { player_id: a.id, match_id: 'demo-tsl-5', outcome: 'H' }, // gelecek → mühürlü
+    { player_id: b.id, match_id: 'demo-tsl-6', outcome: 'A' },
+    { player_id: c?.id ?? a.id, match_id: 'demo-tsl-7', outcome: 'D' },
+    { player_id: a.id, match_id: 'demo-tsl-7', outcome: 'H' },
+  ]
+  await supabase.from('predictions').upsert(predictions, { onConflict: 'player_id,match_id' })
+  return predictions.length
+}
+
+// ----------------------------------------------------------------------
 // HTTP sunucusu
 // ----------------------------------------------------------------------
 
@@ -292,7 +356,8 @@ async function handleApi(request) {
     case 'POST /api/admin/login':
       return admin.login(webReq)
     case 'GET /api/admin/bootstrap':
-      return admin.bootstrap(supabase)
+      // ?league= parametresi uca taşınır (#21); parametresiz → aktif EU.
+      return admin.bootstrap(supabase, webReq)
     case 'PUT /api/admin/predictions':
       return admin.savePredictions(supabase, webReq)
     case 'POST /api/admin/players':
@@ -363,11 +428,16 @@ server.listen(PORT, () => {
   console.log(`  Adres        : http://localhost:${PORT}`)
   console.log(`  Yönetim      : http://localhost:${PORT}/admin  (şifre: ${process.env.ADMIN_PASSWORD})`)
   console.log(`  Başlangıç    : 3 demo oyuncu (Ogün, Mert, Ece) · veriler bellekte, reset'te silinir`)
-  console.log(`  Maç verisi   : gerçek ESPN · açılışta çekiliyor (~2-4 sn)`)
+  console.log(`  Maç verisi   : gerçek ESPN · iki lig (EU: UEFA kupaları, TSL: Süper Lig tüm fikstür) · açılışta çekiliyor (~2-4 sn)`)
   // Açılışta ısıtma: ilk /api/league isteği beklemeden fikstürü çek.
   syncing = maybeSync(supabase)
     .catch(err => console.error('açılış senkronu hatası:', err.message))
     .then(async () => {
+      // #21: gerçek tur.1 verisinin yanına garantili TSL demo seti.
+      const seeded = await seedTslDemo(supabase)
+      if (seeded > 0) {
+        console.log(`  TSL demo     : 7 Süper Lig maçı + ${seeded} tahmin tohumlandı (?league=TSL ile görünür)`)
+      }
       // DEV_FAKE_ARCHIVE=1: geçmiş sezon UI akışını uçtan uca denemek için
       // ilk 8 maçın kopyasını yapma sezonuna (2025) taşır — yalnız bellekte.
       if (!process.env.DEV_FAKE_ARCHIVE) return

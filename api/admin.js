@@ -3,9 +3,10 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { getSupabase, isReadonly } from '../lib/supabase.js'
-import { syncNow } from '../lib/sync.js'
+import { syncNow, writeSyncSummary } from '../lib/sync.js'
 import { buildAdminPayload, DEFAULT_SCORING, initialsOf } from '../lib/league.js'
 import { isLocked } from '../lib/status.js'
+import { LEAGUE_BY_CODE, ACTIVE_LEAGUE_CODES, activeLeague } from '../lib/targets.js'
 
 const READONLY_MSG = 'Salt-okunur mod: SUPABASE_SERVICE_ROLE_KEY tanımlı değil. Yazma işlemleri için .env dosyasına ekleyin.'
 
@@ -46,8 +47,14 @@ export async function login(request) {
   return json(200, { ok: true })
 }
 
-export async function bootstrap(supabase) {
-  const payload = await buildAdminPayload(supabase)
+export async function bootstrap(supabase, request) {
+  // ?league= doğrulaması /api/league deseniyle aynı: parametre supabase
+  // erişiminden ÖNCE denetlenir — hatalı istek hiçbir yan etki tetiklemez.
+  const leagueParam = (new URL(request.url).searchParams.get('league') ?? '').trim()
+  if (leagueParam !== '' && !LEAGUE_BY_CODE[leagueParam]) {
+    return json(400, { error: 'Bilinmeyen lig.' })
+  }
+  const payload = await buildAdminPayload(supabase, { league: leagueParam || activeLeague() })
   return json(200, payload)
 }
 
@@ -344,9 +351,41 @@ export async function deleteAvatar(supabase, request) {
 // router'ın bilinmeyen uç 404'ü döner.
 
 export async function sync(supabase) {
+  // #21: manuel senkron da tüm aktif ligleri paralel çalıştırır (maybeSync
+  // davranışıyla aynı). Yanıt alanları tek lig döneminkilerle aynı kalır;
+  // ek olarak `leagues` altında lig bazlı sonuç taşınır (UI fazında kullanılır).
   try {
-    const result = await syncNow(supabase)
-    return json(200, { ok: true, ...result })
+    const settled = await Promise.allSettled(
+      ACTIVE_LEAGUE_CODES.map(code => syncNow(supabase, { league: code })),
+    )
+    const leagues = {}
+    const errors = []
+    let matchesSeen = 0
+    let changed = 0
+    let complete = true
+    let failure = null
+    for (let i = 0; i < settled.length; i += 1) {
+      const code = ACTIVE_LEAGUE_CODES[i]
+      const result = settled[i]
+      if (result.status === 'rejected') {
+        complete = false
+        failure = result.reason?.message
+        errors.push(`${code}: ${failure}`)
+        leagues[code] = { ok: false, error: failure }
+      } else {
+        matchesSeen += result.value.matchesSeen
+        changed += result.value.changed
+        complete = complete && result.value.complete
+        if (!result.value.complete) errors.push(`${code}: ${result.value.errors.join(' | ')}`)
+        leagues[code] = { ok: true, ...result.value }
+      }
+    }
+    // Küresel sync_state özeti (#21 T3 review): per-lig son yazan kazanır
+    // yarışını düzelt — maybeSync ile aynı birleşik özet kalıcı yazılır.
+    await writeSyncSummary(supabase, matchesSeen, errors)
+    // Tüm ligler hata verdiyse tek lig dönemindeki gibi 502 döner.
+    if (matchesSeen === 0 && failure) throw new Error(failure)
+    return json(200, { ok: true, matchesSeen, changed, complete, leagues })
   } catch (err) {
     return json(502, { ok: false, error: err.message })
   }
@@ -383,7 +422,7 @@ async function route(request) {
 
     switch (routeKey) {
       case 'GET /api/admin/bootstrap':
-        return await bootstrap(supabase)
+        return await bootstrap(supabase, request)
       case 'PUT /api/admin/predictions':
         return await savePredictions(supabase, request)
       case 'POST /api/admin/players':

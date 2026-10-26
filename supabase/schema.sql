@@ -22,7 +22,9 @@ create table if not exists matches (
   id                   uuid primary key default gen_random_uuid(),
   provider             text not null default 'espn',
   external_id          text not null,
-  competition          text not null check (competition in ('CL', 'EL', 'UECL')),
+  -- #21: 'TSL' = Süper Lig (tur.1, tüm fikstür). Lig→turnuva eşlemesi
+  -- lib/targets.js LEAGUE_COMPETITIONS'te.
+  competition          text not null check (competition in ('CL', 'EL', 'UECL', 'TSL')),
   kickoff              timestamptz not null,
   status               text not null default 'SCHEDULED',
   minute               int,
@@ -41,6 +43,7 @@ create table if not exists matches (
   -- Dondurulmuş boyut flag'leri (#18): insert anında yazılır, sonradan
   -- değişmez. Mevcut kurulumlarda migrations/ SQL'i ile eklenir.
   season_year          int,
+  -- Tahmin ligi (#21): 'EU' (Avrupa) | 'TSL' (Süper Lig) — lib/targets.js LEAGUES.
   league               text not null default 'EU',
   last_provider_update timestamptz,
   created_at           timestamptz not null default now(),
@@ -65,6 +68,13 @@ create table if not exists app_config (
   key   text primary key,
   value jsonb not null
 );
+
+-- app_config anahtar biçimleri (#21):
+--   'scoring'               — KÜRESEL puanlama kuralı (lig bazlı DEĞİL).
+--   'bonus:<lig>:<sezon>'   — lig+sezonluk bonuslar, {playerId: puan}
+--                             (örn. 'bonus:EU:2026', 'bonus:TSL:2026').
+--   'bonus:<sezon>'         — göç öncesi eski biçim; yalnız EU yedeği olarak
+--                             okunur (2026-11-super-lig.sql göçünü izler).
 
 insert into app_config (key, value)
 values ('scoring', '{"label":"Doğru sonuç 1 puan","status":"provisional","correctOutcome":1}'::jsonb)

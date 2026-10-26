@@ -39,9 +39,12 @@ html {
 
 body {
   margin: 0;
+  /* #21: zemin ışımaları ligden bağımsız nötr — lig tonu --bg üzerinden
+     background-color transition'ıyla yumuşakça döner (gradient animasyonlanamaz;
+     eski lig-bazlı radial'lar sert geçiyordu). */
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(184, 243, 74, 0.07), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(57, 223, 178, 0.05), transparent 60%),
+    radial-gradient(900px 480px at 85% -10%, rgba(160, 190, 220, 0.06), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(160, 190, 220, 0.04), transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
@@ -49,6 +52,7 @@ body {
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   min-height: 100vh;
+  transition: background-color 0.45s ease, color 0.45s ease;
 }
 
 button {
@@ -105,9 +109,12 @@ body.admin-mode .brand-mark {
 
 body {
   margin: 0;
+  /* #21: zemin ışımaları ligden bağımsız nötr — lig tonu --bg üzerinden
+     background-color transition'ıyla yumuşakça döner (gradient animasyonlanamaz;
+     eski lig-bazlı radial'lar sert geçiyordu). */
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(184, 243, 74, 0.07), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(57, 223, 178, 0.05), transparent 60%),
+    radial-gradient(900px 480px at 85% -10%, rgba(160, 190, 220, 0.06), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(160, 190, 220, 0.04), transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
@@ -115,10 +122,109 @@ body {
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   min-height: 100vh;
+  transition: background-color 0.45s ease, color 0.45s ease;
 }
 
+/* ============================================================
+   #21 Faz 2 — lig temaları + soluk zemin logosu
+   ============================================================ */
+
+/* Tam ekran soluk lig logosu: İKİ sabit katman (before=EU, after=TSL)
+   opacity crossfade ile yumuşakça geçer (background-image animasyonlanamaz;
+   kullanıcı geri bildirimi: lig geçişi sertti). Gri tonlama + çok düşük
+   opaklık; tıklama hiçbir zaman kesilmesin (pointer-events:none). Statik
+   CSS — Gea kuralı 10: dinamik attr/URL bağlama yok. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: no-repeat center/contain;
+  filter: grayscale(1);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+body::before {
+  background-image: url('/logos/eu.svg');
+}
+
+body::after {
+  background-image: url('/logos/tsl.svg');
+}
+
+body.league-eu::before {
+  opacity: 0.05;
+}
+
+body.league-tsl::after {
+  opacity: 0.06;
+}
+
+/* Tüm uygulama içeriği soluk logonun ÜSTÜNDE. .app-root pozitif
+   z-index'le kendi yığın bağlamını kurar; topbar/sheet/popover/toast
+   zaten .app-root içinde kendi z-index'leriyle katmanlaşır. */
 .app-root {
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Lig geçişinde renkler yumuşak dönsün: aksan yüzeylerinde kısa renk
+   geçişleri. Kendi transition'ı olan seçiciler (sınıf spesifikliği)
+   bu genel kuralı ezer; animasyonlar (iskelet nabzı vb.) etkilenmez. */
+.app-root,
+.app-root * {
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease;
+}
+
+/* Avrupa teması: UEFA mavisi aksan + hafif mavi zemin tonu (--bg). */
+body.league-eu {
+  --accent: #6db6ff;
+  --accent-hi: #8fc9ff;
+  --ink: #071527;
+  --bg: #071320;
+}
+
+body.league-eu .brand-mark {
+  background: linear-gradient(135deg, var(--accent), #3f8fda);
+  box-shadow: 0 6px 18px rgba(109, 182, 255, 0.25);
+}
+
+/* Süper Lig teması: kırmızı aksan (canlı göstergesi --live ile ton
+   ayrımı korur) + hafif kızıl zemin tonu. */
+body.league-tsl {
+  --accent: #ff4a5e;
+  --accent-hi: #ff7080;
+  --ink: #2a060c;
+  --bg: #1c0b10;
+}
+
+body.league-tsl .brand-mark {
+  background: linear-gradient(135deg, var(--accent), #d92c42);
+  box-shadow: 0 6px 18px rgba(255, 74, 94, 0.25);
+}
+
+/* Topbar'da küresel lig değiştirici (#21): topbar-inner altında ikinci
+   satır — mobilde yatay taşma yapmaz, sticky kalır. */
+.league-switch-row {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 8px 0 0;
+}
+
+.league-switch .seg-item {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
 }
 
 /* İçerik ölçülü genişlikte: tam genişlik yerine okunaklı satır yoğunluğu. */
@@ -1124,6 +1230,34 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+/* #21 Faz 3: akordiyon içi takım form çipleri (home.form / away.form). */
+.match-acc-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 8px 0;
+}
+
+.match-acc-form {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.match-acc-form-team {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .match-acc-list .pred-row {
   background: var(--surface-2);
 }
@@ -1934,14 +2068,21 @@ body {
   color: var(--muted);
 }
 
+/* #21: TSL puan tablosundaki İsabet % hücresi. */
+.col-num.acc-col {
+  font-weight: 750;
+}
+
 .col-num.points {
   font-weight: 900;
   font-size: 17px;
   color: var(--accent);
 }
 
+/* #21: kendi satırı vurgusu lige göre aksan tonuna uyar (temasız taban
+   için --accent varsayılan lime'dır — görünüm değişmez). */
 .own-row td {
-  background: rgba(184, 243, 74, 0.05);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .table-legend {
@@ -1949,6 +2090,40 @@ body {
   font-size: 11px;
   color: var(--muted-2);
   text-align: right;
+}
+
+/* ---------- #21 Faz 3: Puan sayfası görünüm segmenti + Haftanın Tahmincisi ---------- */
+
+.standings-view-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.standings-view-switch .seg-item {
+  padding: 7px 14px;
+  font-size: 12.5px;
+}
+
+.championship-view .page-meta {
+  justify-content: center;
+}
+
+.weekly-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(184, 243, 74, 0.12), rgba(92, 225, 230, 0.08));
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+
+.weekly-top b {
+  color: var(--text);
 }
 
 /* ---------- Tahminlerim ---------- */
@@ -2534,6 +2709,84 @@ body {
   font-size: 13.5px;
   color: var(--muted);
   margin-bottom: 16px;
+}
+
+/* ---------- #21 Faz 3: admin lig seçici + hızlı giriş + senkron lig satırları ---------- */
+
+.admin-league-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.admin-league-switch .seg-item {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.admin-league-context {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--muted);
+}
+
+.quick-fill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  margin-bottom: 12px;
+}
+
+.quick-fill-label {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--muted);
+}
+
+.sync-league-box {
+  margin-top: 16px;
+}
+
+.sync-league-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+  margin-bottom: 8px;
+}
+
+.sync-league-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.sync-league-line.err {
+  border-color: rgba(255, 93, 112, 0.45);
+}
+
+.sync-league-name {
+  font-weight: 800;
+}
+
+.sync-league-detail {
+  color: var(--muted);
+  text-align: right;
 }
 
 .admin-day {

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Avrupa">
+  <!-- Özgün vektör işaret: yıldız-top + AVRUPA yazısı (#21 Faz 2).
+       Tek renk (beyaz) — zeminde grayscale filtresiyle soluk gösterilir.
+       Resmî/logo değil; aynı dosya adıyla değiştirilebilir. -->
+  <g fill="#ffffff">
+    <circle cx="120" cy="106" r="82" fill="none" stroke="#ffffff" stroke-width="10"/>
+    <polygon points="120,62 130.6,91.4 161.8,92.4 137.1,111.6 145.9,141.6 120,124 94.1,141.6 102.9,111.6 78.2,92.4 109.4,91.4"/>
+    <text x="120" y="212" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="8" fill="#ffffff">AVRUPA</text>
+  </g>
+</svg>

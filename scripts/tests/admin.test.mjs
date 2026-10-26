@@ -113,12 +113,46 @@ suite.test('login: yanlış şifre 401, doğru şifre 200, bozuk JSON 401', asyn
 
 suite.test('bootstrap: admin payload 200 döner', async () => {
   const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
-  const res = await bootstrap(sup)
+  const res = await bootstrap(sup, new Request('http://localhost:8787/api/admin/bootstrap'))
   assert.equal(res.status, 200)
   const body = await res.json()
   assert.equal(body.players.length, 2)
   assert.equal(body.matches.length, 5)
   assert.equal(typeof body.predictions, 'object')
+})
+
+suite.test('bootstrap #21: ?league=TSL kapsamı; bilinmeyen lig 400; parametresiz EU', async () => {
+  const now = Date.now()
+  const sup = createMemorySupabase({
+    players: basePlayers(),
+    matches: [
+      ...baseMatches(now).slice(0, 2),
+      row({
+        id: 'm-tsl', external_id: '90', competition: 'TSL',
+        kickoff: iso(now + 24 * hour), status: 'TIMED',
+        home_name: 'Samsunspor', home_short: 'Samsunspor',
+        away_name: 'Konyaspor', away_short: 'Konyaspor',
+        home_score: null, away_score: null, league: 'TSL',
+      }),
+    ],
+  })
+  const req = q => new Request(`http://localhost:8787/api/admin/bootstrap${q}`)
+
+  const tsl = await bootstrap(sup, req('?league=TSL'))
+  assert.equal(tsl.status, 200)
+  const body = await tsl.json()
+  assert.deepEqual(body.matches.map(m => m.id), ['m-tsl'], 'bootstrap editörü TSL kapsamında')
+  assert.deepEqual(body.competitions, [{ code: 'TSL', name: 'Süper Lig' }], 'competitions lig kapsamında')
+
+  const bad = await bootstrap(sup, req('?league=XX'))
+  assert.equal(bad.status, 400)
+  assert.equal((await bad.json()).error, 'Bilinmeyen lig.')
+
+  const eu = await bootstrap(sup, req(''))
+  assert.equal(eu.status, 200)
+  const euBody = await eu.json()
+  assert.deepEqual(euBody.matches.map(m => m.id).sort(), ['m-open', 'm-open2'], 'parametresiz → aktif lig (EU)')
+  assert.equal(euBody.matches.length, 2, 'TSL satırı EU kapsamına girmez')
 })
 
 // --- savePredictions ---
@@ -504,7 +538,7 @@ suite.test('deleteAvatar: playerId query string\'den de okunur', async () => {
 
 // --- sync ---
 
-suite.test('sync: syncNow başarılıysa 200 + sonuç', async () => {
+suite.test('sync #21: tüm aktif ligler senkronlanır, özet toplam döner', async () => {
   const sy = seasonYear()
   const ev = espnEvent({
     id: 701,
@@ -515,24 +549,43 @@ suite.test('sync: syncNow başarılıysa 200 + sonuç', async () => {
     home: { displayName: 'Galatasaray SK', score: { displayValue: '2' } },
     away: { displayName: 'Barcelona', score: { displayValue: '1' } },
   })
+  const evTsl = espnEvent({
+    id: 702,
+    seasonYear: sy,
+    date: iso(Date.now() - 2 * hour),
+    week: null,
+    statusName: 'STATUS_FINAL',
+    state: 'post',
+    home: { displayName: 'Samsunspor', score: { displayValue: '1' } },
+    away: { displayName: 'Konyaspor', score: { displayValue: '1' } },
+  })
   const sup = createMemorySupabase()
-  const stub = withStubbedFetch([['uefa.champions/scoreboard', { events: [ev] }]])
+  const stub = withStubbedFetch([
+    ['uefa.champions/scoreboard', { events: [ev] }],
+    ['tur.1/scoreboard', { events: [evTsl] }],
+  ])
   try {
     const res = await sync(sup)
     assert.equal(res.status, 200)
     const body = await res.json()
     assert.equal(body.ok, true)
-    assert.equal(body.matchesSeen, 1)
-    assert.equal(body.changed, 1)
+    assert.equal(body.matchesSeen, 2, 'EU 1 + TSL 1 maç toplamı')
+    assert.equal(body.changed, 2)
     assert.equal(body.complete, true)
-    assert.equal(sup.store.matches.length, 1)
-    assert.equal(sup.store.matches[0].status, 'FINISHED')
+    assert.ok(body.leagues.EU.ok && body.leagues.TSL.ok, 'lig bazlı sonuç taşınır')
+    assert.equal(sup.store.matches.filter(m => m.league === 'EU').length, 1, 'EU satırı')
+    assert.equal(sup.store.matches.filter(m => m.league === 'TSL').length, 1, 'TSL satırı')
+    assert.equal(sup.store.matches.find(m => m.league === 'TSL').competition, 'TSL')
+    assert.equal(sup.store.matches.find(m => m.league === 'TSL').status, 'FINISHED')
+    // #21 T3 review: küresel sync_state özeti mutlu yolda toplamı taşır.
+    assert.equal(sup.store.sync_state[0].matches_seen, 2, 'sync_state: EU 1 + TSL 1 toplam')
+    assert.equal(sup.store.sync_state[0].last_error, null, 'sync_state: hata yok')
   } finally {
     stub.restore()
   }
 })
 
-suite.test('sync: kaynak tamamen hatalıysa 502', async () => {
+suite.test('sync: tüm ligler hatalıysa 502; tek lig hatalıysa 200 + kısmi özet', async () => {
   const sup = createMemorySupabase()
   const stub = withStubbedFetch([], { defaultJson: new Error('ağ erişimi yok') })
   try {
@@ -544,6 +597,35 @@ suite.test('sync: kaynak tamamen hatalıysa 502', async () => {
     assert.equal(sup.store.matches.length, 0)
   } finally {
     stub.restore()
+  }
+
+  // EU sağlam + TSL boş kaynak: 200 döner, complete=false, TSL notu taşınır.
+  const sy = seasonYear()
+  const ev = espnEvent({
+    id: 703,
+    seasonYear: sy,
+    date: iso(Date.now() - hour),
+    statusName: 'STATUS_FINAL',
+    state: 'post',
+    home: { displayName: 'Galatasaray SK', score: { displayValue: '2' } },
+    away: { displayName: 'Barcelona', score: { displayValue: '1' } },
+  })
+  const supPartial = createMemorySupabase()
+  const stubPartial = withStubbedFetch([['uefa.champions/scoreboard', { events: [ev] }]])
+  try {
+    const res = await sync(supPartial)
+    assert.equal(res.status, 200, 'tek lig hata verse de kısmi başarı 200')
+    const body = await res.json()
+    assert.equal(body.matchesSeen, 1)
+    assert.equal(body.complete, false, 'TSL boş → complete=false')
+    assert.ok(body.leagues.TSL.error.includes('Senkronizasyon kayıt döndürmedi'), 'TSL hatası lig bazlı notta')
+    // #21 T3 review: küresel sync_state özeti — per-lig "son yazan kazanır"
+    // yarışı yerine birleşik not kalıcı yazılır (TSL notu EU null'ıyla ezilmez).
+    const state = supPartial.store.sync_state[0]
+    assert.equal(state.matches_seen, 1, 'özet: yalnız EU maç sayısı')
+    assert.ok(String(state.last_error).includes('TSL'), 'özet: TSL hatası last_error\'da')
+  } finally {
+    stubPartial.restore()
   }
 })
 

@@ -1,3 +1,4 @@
+import leagueStore from '../stores/league-store'
 import Avatar from './Avatar'
 import { cn } from '../utils/cn'
 
@@ -13,10 +14,14 @@ export default function StandingsRow({ row, isOwn }: { row: any; isOwn: boolean 
         </span>
       </td>
       <td class="col-num">{row.played}</td>
-      <td class="col-num team-col">{row.teamCorrect.FB}</td>
-      <td class="col-num team-col">{row.teamCorrect.GS}</td>
-      <td class="col-num team-col">{row.teamCorrect.BJK}</td>
-      <td class="col-num team-col">{row.teamCorrect.TS}</td>
+      {/* #21: TSL satırı — takım sütunları yerine isabet yüzdesi. Koşullar
+          doğrudan store okumasıyla; hücre içeriği prop'tan metin olarak
+          tüketilir (ikisi de kanıtlanmış güvenli desen). */}
+      {leagueStore.league === 'TSL' ? <td class="col-num acc-col">%{row.accuracy ?? 0}</td> : null}
+      {leagueStore.league !== 'TSL' ? <td class="col-num team-col">{row.teamCorrect.FB}</td> : null}
+      {leagueStore.league !== 'TSL' ? <td class="col-num team-col">{row.teamCorrect.GS}</td> : null}
+      {leagueStore.league !== 'TSL' ? <td class="col-num team-col">{row.teamCorrect.BJK}</td> : null}
+      {leagueStore.league !== 'TSL' ? <td class="col-num team-col">{row.teamCorrect.TS}</td> : null}
       <td class="col-num points">{row.points}</td>
     </tr>
   )
