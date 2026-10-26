@@ -29,6 +29,16 @@ export default class App extends Component {
     }
     applyAdminMode()
     adminStore.observe('authed', applyAdminMode)
+    // #21 Faz 2: lig teması body sınıfı — admin-mode deseniyle aynı: ilk
+    // değer (localStorage'dan gelen lig) elle uygulanır, observe değişimde
+    // (switchLeague) sınıfları tazeler. CSS değişkenleri + zemin logosu
+    // body.league-eu / body.league-tsl bloklarından gelir.
+    const applyLeagueTheme = () => {
+      document.body.classList.remove('league-eu', 'league-tsl')
+      document.body.classList.add(leagueStore.league === 'TSL' ? 'league-tsl' : 'league-eu')
+    }
+    applyLeagueTheme()
+    leagueStore.observe('league', applyLeagueTheme)
   }
 
   template() {

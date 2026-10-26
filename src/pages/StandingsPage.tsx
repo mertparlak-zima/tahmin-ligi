@@ -100,7 +100,10 @@ export default class StandingsPage extends Component {
         <StandingsTable standings={standings} />
 
         <div class="table-legend">
-          O: oynanan maç · FB/GS/BJK/TS: takım bazlı doğru sonuç · P: puan
+          {/* #21: TSL'de sütun seti farklı — açıklama da lige göre. */}
+          {leagueStore.league === 'TSL'
+            ? 'O: oynanan maç · İsabet %: doğru tahmin oranı · P: puan'
+            : 'O: oynanan maç · FB/GS/BJK/TS: takım bazlı doğru sonuç · P: puan'}
         </div>
       </div>
     )

@@ -14,11 +14,18 @@ import { buildFlowEvents } from '../utils/flow.js'
 
 export type StatusFilter = 'all' | 'live' | 'upcoming' | 'finished'
 
-/** sessionStorage SWR önbelleği (#16): dönüş ziyarette ilk ekran anında. */
-const CACHE_KEY = 'tahminligi.league.cache.v1'
+/** sessionStorage SWR önbelleği (#16): dönüş ziyarette ilk ekran anında.
+ *  v2 (#21): kayda lig kodu eklendi — hidrasyon yalnız aktif lig için;
+ *  tek anahtar üzerine yazıldığından yalnız SON lig önbellekte kalır
+ *  (büyük TSL payload'ı kota riski oluşturmaz). */
+const CACHE_KEY = 'tahminligi.league.cache.v2'
 const CACHE_MAX_AGE_MS = 12 * 3600_000
+/** #21 Faz 2: seçili lig tercihi localStorage'da kalıcı. */
+const LEAGUE_PREF_KEY = 'tahminligi.league'
 
 class LeagueStore extends Store {
+  /** #21 Faz 2: seçili lig ('EU' | 'TSL'); localStorage'dan okunur, switchLeague'de yazılır. */
+  league: string = 'EU'
   data: any = null
   loading = false
   error: string | null = null
@@ -33,7 +40,8 @@ class LeagueStore extends Store {
   selectedSeason = 0
   archiveLoading = false
   archiveError: string | null = null
-  private archiveCache: Record<number, any> = {}
+  /** Arşiv sezon payload önbelleği — anahtar `${lig}:${sezon}` (#21). */
+  private archiveCache: Record<string, any> = {}
   /** Ay takvimi (#19): '' = bugünün ayı. */
   selectedMonthKey = ''
   calendarLoading = false
@@ -42,8 +50,9 @@ class LeagueStore extends Store {
    *  route sayfaları leagueStore yazılarına kanıtlanmış biçimde yeniden
    *  render oluyor (uiStore alan yazıları bu sayfayı tetiklemiyordu). */
   selectedPlayerId = ''
-  /** Ay takviminin sezon payload önbelleği (sezon başına tek fetch). */
-  private monthSeasonCache: Record<number, any> = {}
+  /** Ay takviminin sezon payload önbelleği (sezon başına tek fetch) —
+   *  anahtar `${lig}:${sezon}` (#21). */
+  private monthSeasonCache: Record<string, any> = {}
 
   selectedDate = ''
   statusFilter: StatusFilter = 'all'
@@ -54,15 +63,28 @@ class LeagueStore extends Store {
 
   constructor() {
     super()
+    this.hydrateLeaguePref()
     this.hydrateFromCache()
   }
 
-  /** sessionStorage'dan stale-while-revalidate hidrasyonu (#16). */
+  /** #21 Faz 2: kalıcı lig tercihi — basit 'EU'|'TSL' bekçisi (bilinmeyen → EU). */
+  private hydrateLeaguePref() {
+    try {
+      this.league = localStorage.getItem(LEAGUE_PREF_KEY) === 'TSL' ? 'TSL' : 'EU'
+    } catch {
+      this.league = 'EU'
+    }
+  }
+
+  /** sessionStorage'dan stale-while-revalidate hidrasyonu (#16). Yalnız
+   *  ÖNBELLEKTEKİ lig aktif ligle aynıysa hidratlanır (#21) — aksi halde
+   *  yanlış lig verisi parlamasın diye iskelet gösterilir. */
   private hydrateFromCache() {
     try {
       const raw = sessionStorage.getItem(CACHE_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw)
+      if (parsed?.league !== this.league) return
       const payload = parsed?.payload
       if (!payload?.meta?.season || !Array.isArray(payload?.matches)) return
       if (Date.now() - (parsed.savedAt ?? 0) > CACHE_MAX_AGE_MS) return
@@ -76,7 +98,7 @@ class LeagueStore extends Store {
 
   private saveCache(payload: any) {
     try {
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), etag: this.etag, payload }))
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), etag: this.etag, league: this.league, payload }))
     } catch {
       // Kota/private mod — önbellek yazılamadı, sorun değil.
     }
@@ -86,7 +108,7 @@ class LeagueStore extends Store {
     if (!silent) this.loading = true
     const seq = ++this.seq
     try {
-      const res = await fetch('/api/league', {
+      const res = await fetch(`/api/league?league=${encodeURIComponent(this.league)}`, {
         cache: 'no-store',
         ...(this.etag ? { headers: { 'if-none-match': this.etag } } : {}),
       })
@@ -159,18 +181,49 @@ class LeagueStore extends Store {
     return this.load()
   }
 
+  /** #21 Faz 2: küresel lig değiştirme. Aynı ligde no-op. Lig yazılır +
+   *  kalıcı edilir; görünüm durumu (gün/filtre/sezon/ay/oyuncu) sıfırlanır;
+   *  etag + arşiv/ay-önbellekleri düşürülür (başka ligin verisi); data=null
+   *  → iskelet (yanlış lig parlaması yok); ardından yeni lig çekilir. */
+  switchLeague(code: string) {
+    if (code === this.league || (code !== 'EU' && code !== 'TSL')) return
+    this.league = code
+    try {
+      localStorage.setItem(LEAGUE_PREF_KEY, code)
+    } catch {
+      // Private mod — tercih yalnız bu oturumda geçerli.
+    }
+    this.selectedDate = ''
+    this.statusFilter = 'all'
+    this.competitionFilter = 'all'
+    this.selectedSeason = 0
+    this.selectedMonthKey = ''
+    this.selectedPlayerId = ''
+    this.error = null
+    this.archiveError = null
+    this.calendarError = null
+    this.etag = ''
+    this.archiveCache = {}
+    this.monthSeasonCache = {}
+    this.consecutiveFailures = 0
+    this.hydratedFromCache = false
+    this.data = null
+    this.load()
+  }
+
   /** "Geçmiş Sezonlar" seçimi (#18 PR2): sezon verisi ayrı çekilir ve önbelleklenir;
    *  ana `data` (Maçlar/Geçmiş/Tahminlerim/MatchSheet) her zaman aktif sezon kalır. */
   async selectSeason(year: number) {
     this.selectedSeason = year
     if (year === 0) return
-    if (this.archiveCache[year]) return
+    const cacheKey = `${this.league}:${year}`
+    if (this.archiveCache[cacheKey]) return
     this.archiveLoading = true
     this.archiveError = null
     try {
-      const res = await fetch(`/api/league?season=${year}`, { cache: 'no-store' })
+      const res = await fetch(`/api/league?season=${year}&league=${encodeURIComponent(this.league)}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
-      this.archiveCache[year] = await res.json()
+      this.archiveCache[cacheKey] = await res.json()
     } catch (err: any) {
       this.archiveError = err?.message ?? 'Sezon verisi alınamadı.'
     } finally {
@@ -223,13 +276,14 @@ class LeagueStore extends Store {
     const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
     const activeSeason = this.data?.meta?.season?.year
     if (activeSeason == null || season === activeSeason) return
-    if (this.monthSeasonCache[season]) return
+    const cacheKey = `${this.league}:${season}`
+    if (this.monthSeasonCache[cacheKey]) return
     this.calendarLoading = true
     this.calendarError = null
-    fetch(`/api/league?season=${season}`, { cache: 'no-store' })
+    fetch(`/api/league?season=${season}&league=${encodeURIComponent(this.league)}`, { cache: 'no-store' })
       .then(async res => {
         if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
-        this.monthSeasonCache[season] = await res.json()
+        this.monthSeasonCache[cacheKey] = await res.json()
       })
       .catch((err: any) => {
         this.calendarError = err?.message ?? 'Sezon verisi alınamadı.'
@@ -245,7 +299,7 @@ class LeagueStore extends Store {
     if (!parsed) return this.data
     const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
     if (season === this.data?.meta?.season?.year) return this.data
-    return this.monthSeasonCache[season] ?? this.data
+    return this.monthSeasonCache[`${this.league}:${season}`] ?? this.data
   }
 
   /** Ay matrisi — türetme store getter'ında (Gea kuralı 7); hücre anahtarları
@@ -334,7 +388,7 @@ class LeagueStore extends Store {
     if (!parsed) return this.data
     const season = seasonOfYearMonth(parsed.year, parsed.monthIndex)
     if (season === this.data?.meta?.season?.year) return this.data
-    return this.monthSeasonCache[season] ?? this.data
+    return this.monthSeasonCache[`${this.league}:${season}`] ?? this.data
   }
 
   /** Gün anahtarı → o günün maçları (saat sırasına göre). Önizleme popover'ı için. */
@@ -399,6 +453,12 @@ class LeagueStore extends Store {
 
   get competitions(): any[] {
     return this.data?.competitions ?? []
+  }
+
+  /** #21 Faz 2: seçilebilir ligler (meta.leagues; meta gelene dek boş →
+   *  değiştirici gizli). Türetme store getter'ında (Gea kuralı 7). */
+  get leagueOptions(): Array<{ code: string; name: string }> {
+    return this.data?.meta?.leagues ?? []
   }
 
   /** Podyum sırası: 2.-1.-3. */
@@ -520,7 +580,7 @@ class LeagueStore extends Store {
   /** Puan Durumu sayfasının verisi: seçili arşiz sezonu ya da aktif sezon. */
   get standingsData(): any {
     if (this.selectedSeason === 0) return this.data
-    return this.archiveCache[this.selectedSeason] ?? null
+    return this.archiveCache[`${this.league}:${this.selectedSeason}`] ?? null
   }
 
   get loadingInitial(): boolean {

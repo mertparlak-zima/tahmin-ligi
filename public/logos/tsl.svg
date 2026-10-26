@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Süper Lig">
+  <!-- Özgün vektör işaret: hilal-yıldız + SÜPER LİG yazısı (#21 Faz 2).
+       Tek renk (beyaz) — zeminde grayscale filtresiyle soluk gösterilir.
+       Resmî/logo değil; aynı dosya adıyla değiştirilebilir. -->
+  <g fill="#ffffff">
+    <path d="M110 36 A76 76 0 1 0 110 188 A92 92 0 1 1 110 36 Z"/>
+    <polygon points="162,78 170.2,100.7 194.3,101.5 175.3,116.3 182,139.5 162,126 142,139.5 148.7,116.3 129.7,101.5 153.8,100.7"/>
+    <text x="120" y="222" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="28" font-weight="800" letter-spacing="4" fill="#ffffff">SÜPER LİG</text>
+  </g>
+</svg>

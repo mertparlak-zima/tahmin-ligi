@@ -117,8 +117,87 @@ body {
   min-height: 100vh;
 }
 
+/* ============================================================
+   #21 Faz 2 — lig temaları + soluk zemin logosu
+   ============================================================ */
+
+/* Tam ekran soluk lig logosu: gri tonlama + %5 opaklık; tıklama hiçbir
+   zaman kesilmesin (pointer-events:none). Statik CSS — Gea kuralı 10:
+   dinamik attr/URL bağlama yok, lig seçimi body sınıfından gelir. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: no-repeat center/contain;
+  opacity: 0.05;
+  filter: grayscale(1);
+}
+
+body.league-eu::before {
+  background-image: url('/logos/eu.svg');
+}
+
+body.league-tsl::before {
+  background-image: url('/logos/tsl.svg');
+}
+
+/* Tüm uygulama içeriği soluk logonun ÜSTÜNDE. .app-root pozitif
+   z-index'le kendi yığın bağlamını kurar; topbar/sheet/popover/toast
+   zaten .app-root içinde kendi z-index'leriyle katmanlaşır. */
 .app-root {
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Avrupa teması: UEFA mavisi aksan; zemin ışımaları mavi tonlarına kayar.
+   :root koyu stadyom tabanı ortak — yalnız farklılaşan override edilir. */
+body.league-eu {
+  --accent: #6db6ff;
+  --accent-hi: #8fc9ff;
+  --ink: #071527;
+  background:
+    radial-gradient(900px 480px at 85% -10%, rgba(109, 182, 255, 0.08), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(74, 138, 208, 0.06), transparent 60%),
+    var(--bg);
+}
+
+body.league-eu .brand-mark {
+  background: linear-gradient(135deg, var(--accent), #3f8fda);
+  box-shadow: 0 6px 18px rgba(109, 182, 255, 0.25);
+}
+
+/* Süper Lig teması: kırmızı aksan (canlı göstergesi --live ile ton
+   ayrımı korur); zemin ışımaları kırmızıya döner. */
+body.league-tsl {
+  --accent: #ff4a5e;
+  --accent-hi: #ff7080;
+  --ink: #2a060c;
+  background:
+    radial-gradient(900px 480px at 85% -10%, rgba(255, 74, 94, 0.08), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(206, 62, 82, 0.06), transparent 60%),
+    var(--bg);
+}
+
+body.league-tsl .brand-mark {
+  background: linear-gradient(135deg, var(--accent), #d92c42);
+  box-shadow: 0 6px 18px rgba(255, 74, 94, 0.25);
+}
+
+/* Topbar'da küresel lig değiştirici (#21): topbar-inner altında ikinci
+   satır — mobilde yatay taşma yapmaz, sticky kalır. */
+.league-switch-row {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 8px 0 0;
+}
+
+.league-switch .seg-item {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
 }
 
 /* İçerik ölçülü genişlikte: tam genişlik yerine okunaklı satır yoğunluğu. */
@@ -1934,14 +2013,21 @@ body {
   color: var(--muted);
 }
 
+/* #21: TSL puan tablosundaki İsabet % hücresi. */
+.col-num.acc-col {
+  font-weight: 750;
+}
+
 .col-num.points {
   font-weight: 900;
   font-size: 17px;
   color: var(--accent);
 }
 
+/* #21: kendi satırı vurgusu lige göre aksan tonuna uyar (temasız taban
+   için --accent varsayılan lime'dır — görünüm değişmez). */
 .own-row td {
-  background: rgba(184, 243, 74, 0.05);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .table-legend {

@@ -64,13 +64,14 @@ await noOverflow('maçlar')
 // --- 1c) Önbellek hidrasyonu + ETag (#16) ---
 // API bloklanınca sayfa sessionStorage önbelleğinden anında render etmeli
 // (stale-while-revalidate); API açılınca manuel yenileme tazeler.
-await page.route('**/api/league', route => route.abort())
+// #21: istekler artık ?league= taşır → glob sonek jokerli.
+await page.route('**/api/league**', route => route.abort())
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
 const cachedChips = await page.locator('.cal-chip').count()
 check('önbellekten anında render (api bloklu)', cachedChips > 0, `${cachedChips} chip`)
 check('hidrasyon sırasında bant yok', (await page.locator('.stale-band.open').count()) === 0)
-await page.unroute('**/api/league')
+await page.unroute('**/api/league**')
 await page.locator('.icon-btn[aria-label="Yenile"]').click()
 let refreshed = false
 try {
@@ -275,6 +276,40 @@ if (playerCards > 0) {
   await page.waitForTimeout(500)
   const youTag = await page.locator('.you-tag').count()
   check('puan tablosunda SEN satırı', youTag === 1)
+}
+
+// --- 5d) Lig değiştirici (#21 Faz 2): TSL teması + İsabet sütunu ---
+// Puan sayfasındayken Süper Lig segmentine geç → body sınıfı, sütun seti,
+// zemin logosu değişmeli; Avrupa'ya dönüş FB sütununu geri getirmeli.
+const tslSegment = page.locator('.league-switch .seg-item', { hasText: 'Süper Lig' })
+if ((await tslSegment.count()) > 0) {
+  // Sütun doğulamaları puan tablosu sayfasında yapılır.
+  await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
+  await page.waitForTimeout(500)
+  await tslSegment.click()
+  await page.waitForTimeout(2500)
+  check('lig değiştirici TSL body sınıfı', (await page.evaluate(() => document.body.classList.contains('league-tsl'))) === true)
+  check('TSL puan tablosunda İsabet sütunu', (await page.locator('.standings-table th', { hasText: 'İsabet' }).count()) === 1)
+  check('TSL puan tablosunda FB sütunu yok', (await page.locator('.standings-table th', { hasText: 'FB' }).count()) === 0)
+  const accCells = await page.locator('.standings-table td.acc-col').count()
+  check('TSL satırlarında isabet değeri', accCells > 0, `${accCells} hücre`)
+  const tslLogo = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage)
+  check('TSL soluk zemin logosu', tslLogo.includes('/logos/tsl.svg'), String(tslLogo).slice(0, 64))
+  // TSL tek turnuva → kupalar seçici gizli olmalı.
+  await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
+  await page.waitForTimeout(700)
+  check('TSL kupalar seçici gizli', (await page.locator('.filter-bar .comp-select').count()) === 0)
+  await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
+  await page.waitForTimeout(600)
+  // Avrupa'ya dön: tema + FB sütunu + logo geri gelmeli.
+  await page.locator('.league-switch .seg-item', { hasText: 'Avrupa' }).click()
+  await page.waitForTimeout(2500)
+  check('Avrupa dönüşü body sınıfı', (await page.evaluate(() => document.body.classList.contains('league-eu'))) === true)
+  check('Avrupa dönüşünde FB sütunu', (await page.locator('.standings-table th', { hasText: 'FB' }).count()) === 1)
+  const euLogo = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage)
+  check('Avrupa soluk zemin logosu', euLogo.includes('/logos/eu.svg'), String(euLogo).slice(0, 64))
+} else {
+  check('lig değiştirici görünür', false, 'Süper Lig segmenti yok (meta.leagues gelmedi mi?)')
 }
 
 await page.locator('.nav-item', { hasText: 'Akış' }).first().click()
