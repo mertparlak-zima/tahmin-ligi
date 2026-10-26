@@ -332,6 +332,7 @@ class LeagueStore extends Store {
   private calSummariesCache: { monthKey: string; byDay: any; out: any } | null = null
   private calStatsCache: { monthKey: string; byDay: any; out: any } | null = null
   private byDayCache: { data: any; out: any } | null = null
+  private matchWeekCache: { data: any; out: Record<string, number> } | null = null
 
   /** Ay matrisi — türetme store getter'ında (Gea kuralı 7); hücre anahtarları
    *  ay bazlıdır: ay değişince tüm hücreler yeniden doğar (geçiş animasyonu).
@@ -481,6 +482,34 @@ class LeagueStore extends Store {
       list = list.filter(m => m.competitionCode === this.competitionFilter)
     }
     return list
+  }
+
+  /** #21 UI: Süper Lig maçının hafta numarası (matchId → 1'den başlayan hafta).
+   *  ESPN tur.1 kaynaklarında week=null geldiğinden istemcide türetilir:
+   *  aktif sezonun maçlarında distinct ISO pazartesi-hafta anahtarları
+   *  (weeklyTop ile aynı isoMondayKey) küçükten sıralanıp 1'den numaralanır.
+   *  NOT: ertelenen/aktarılan turlar yaklaşım olarak ±1 hafta kayabilir —
+   *  kabul edilir yaklaşım. Arşiv/sezon-öncesi aylarda maç bu haritada yoktur
+   *  → bileşen çipi gizler. Türetme store getter'ında (Gea kuralı 7);
+   *  referans-anahtarlı önbellek (matchesByDay deseni: data referansı
+   *  değişmedikçe yeniden hesaplanmaz, reaktif bağımlılık korunur). */
+  get matchWeekByMatchId(): Record<string, number> {
+    const data = this.data
+    if (this.matchWeekCache?.data === data) return this.matchWeekCache.out
+    const weekKeys = new Set<string>()
+    for (const m of data?.matches ?? []) {
+      weekKeys.add(isoMondayKey(m.kickoff))
+    }
+    const ordered = [...weekKeys].sort((a, b) => (a < b ? -1 : 1))
+    const rankOfKey = new Map<string, number>()
+    ordered.forEach((key, index) => rankOfKey.set(key, index + 1))
+    const out: Record<string, number> = {}
+    for (const m of data?.matches ?? []) {
+      const week = rankOfKey.get(isoMondayKey(m.kickoff))
+      if (week != null) out[m.id] = week
+    }
+    this.matchWeekCache = { data, out }
+    return out
   }
 
   /** Filtrelenmiş maçlar, turnuva bazında gruplanmış. */

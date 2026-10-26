@@ -26,6 +26,15 @@ export default function CalDayCell({ cell }: { cell: { cellId: string; dayKey: s
       click={() => {
         leagueStore.selectDay(cell.dayKey)
         uiStore.closeDatePreview()
+        // #21 UI: maçlı gün seçilince maç listesine yumuşak kaydır —
+        // imperatif DOM işi yalnızca handler'da (Gea güvenli). Sticky
+        // topbar hedefi örtmesin diye .filter-bar scroll-margin-top taşır.
+        if ((leagueStore.calendarMatchesByDay[cell.dayKey] ?? []).length > 0) {
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          document
+            .querySelector('.filter-bar, .comp-group')
+            ?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+        }
       }}
       mouseover={(e: any) => {
         // Önizleme yalnız gerçek hover cihazlarında (#11 ile aynı karar).

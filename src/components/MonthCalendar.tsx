@@ -19,6 +19,8 @@ export default class MonthCalendar extends Component {
     ].filter(Boolean).join(' · ')
     return (
       <div class="cal-root">
+        {/* #21 UI: 3 kolonlu başlık — ok butonları başlığı gerçekten ortadan
+            çepecek (1fr auto 1fr grid); sağ grup Bugün + ileri okunu taşır. */}
         <div class="cal-head">
           <button class="cal-nav" aria-label="Önceki ay" click={() => leagueStore.selectMonth(-1)}>‹</button>
           <div class="cal-title-wrap">
@@ -29,8 +31,8 @@ export default class MonthCalendar extends Component {
             {leagueStore.isCurrentMonth ? null : (
               <button class="cal-today-btn" click={() => leagueStore.goToTodayMonth()}>Bugün</button>
             )}
+            <button class="cal-nav" aria-label="Sonraki ay" click={() => leagueStore.selectMonth(1)}>›</button>
           </div>
-          <button class="cal-nav" aria-label="Sonraki ay" click={() => leagueStore.selectMonth(1)}>›</button>
         </div>
         <div class="cal-grid-head">
           {WEEKDAY_HEADERS.map(h => <CalWeekday key={h} label={h} />)}
