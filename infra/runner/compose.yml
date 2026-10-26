@@ -18,7 +18,20 @@ services:
         chown runner:runner /home/runner
         cd /home/runner
         while [ ! -f .runner ]; do sleep 1; done
-        exec gosu runner:runner ./run.sh
+        # Self-update dostu döngü: listener güncelleme için çıkınca (run.sh
+        # döner) konteyner ÖLMESİN — _work/_update.sh kopyalamayı bitirip yeni
+        # bin/'i yerleştirene kadar PID1 ayakta kalır, sonra run.sh yeniden
+        # başlar. Tek atımlık `exec` deseninde docker restart'u update scripti
+        # kopyalamanın ortasında öldürüp bin/ silinmiş yarıda durumda
+        # bırakıyordu (Runner.Listener yok → 127 döngüsü).
+        while true; do
+          if [ ! -x ./bin/Runner.Listener ]; then
+            sleep 2   # update swap'ı sürüyor; binary gelmesini bekle
+            continue
+          fi
+          gosu runner:runner ./run.sh || true
+          sleep 2
+        done
     volumes:
       - runner-work:/home/runner/_work
 
