@@ -1,11 +1,12 @@
 // Gerçek tarayıcıda (headless Chromium) UI uçtan uca kontrolü.
-// Kullanım: node --env-file=.env scripts/browser-check.mjs
-// Önkoşul: npm run build && npm run dev:db (http://localhost:8787 ayakta)
+// Kullanım: node scripts/browser-check.mjs
+// Önkoşul: npm run build && npm run dev:api (bellek-içi demo sunucu,
+// http://localhost:8787). #24 Faz 2 ile admin girişi kaldırıldı —
+// ADMIN_PASSWORD gerekmez; tahmin/oyuncu akışları herkese açık uçları kullanır.
 
 import { chromium } from 'playwright'
 
 const BASE = process.env.BROWSER_CHECK_URL || 'http://localhost:8787'
-const PASSWORD = process.env.ADMIN_PASSWORD
 
 const results = []
 const check = (name, ok, detail = '') => {
@@ -199,9 +200,9 @@ if (hoverCapable) {
   console.log('  bilgi: hover desteklenmiyor → önizleme testi atlandı')
 }
 
-// --- 2c) Topbar yönetim erişimi ---
-const adminLinkCount = await page.locator('.topbar-actions .admin-link').count()
-check('topbar yönetim düğmesi', adminLinkCount === 1)
+// --- 2c) Yönetim UI kaldırıldı (#24 Faz 2): topbar/footer kilit ve link yok ---
+check('topbar yönetim düğmesi yok', (await page.locator('.topbar-actions .admin-link').count()) === 0)
+check('footer yönetim linki yok', (await page.locator('.footer-admin').count()) === 0)
 
 // --- 3) Filtre segmenti (bilgi amaçlı; hata vermemeli) ---
 // Ay/sezon turlarından sonra seçili gün bugün olabilir; sheet testinin maç
@@ -409,257 +410,128 @@ const flowEvents = await page.locator('.flow-event').count()
 check('akış olayları render', flowEvents > 0, `${flowEvents} olay`)
 await noOverflow('akış')
 
+// --- 6) Herkese açık tahmin girişi (#24 Faz 2: admin paneli kaldırıldı) ---
+// Akordiyon giriş formu: yaklaşan (başlamamış) maç satırı açılır → tüm
+// oyuncular listelenir → bir oyuncu için 1/X/2 seçilir → Kaydet → toast +
+// "girdi" rozeti. Ardından "+ Oyuncu" akışı (probe- önekli isim + temizlik).
 await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
-await page.waitForTimeout(300)
+await page.waitForTimeout(500)
 
-// --- 6) Admin paneli ---
-await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' })
-await page.waitForTimeout(800)
-
-const loginInput = page.locator('.admin-login-card input[type="password"]')
-if (await loginInput.count() > 0) {
-  // yanlış şifre
-  await loginInput.fill('yanlis-sifre')
-  await page.locator('.admin-login-card .btn').click()
-  await page.waitForTimeout(800)
-  check('yanlış şifre hata gösterir', (await page.locator('.error-box').count()) > 0)
-
-  // doğru şifre
-  await loginInput.fill(PASSWORD)
-  await page.locator('.admin-login-card .btn').click()
-  await page.waitForTimeout(2500)
-  check('admin girişi başarılı', (await page.locator('.admin-tabs').count()) === 1)
-
-  // tahmin editörü akordiyonu (#20 U4)
-  const accHeads = await page.locator('.acc-head').count()
-  check('tahmin editörü akordiyon başlıkları', accHeads > 0, `${accHeads} başlık`)
-  await noOverflow('admin editör')
-  check('eski save-bar kaldırıldı', (await page.locator('.save-bar').count()) === 0)
-  check('eski editor-select kaldırıldı', (await page.locator('.editor-select').count()) === 0)
-
-  const firstHead = page.locator('.acc-head').first()
-  if (await firstHead.count() > 0) {
-    check('başlık kapalıyken aria-expanded=false', (await firstHead.getAttribute('aria-expanded')) === 'false')
-    await firstHead.click()
-    await page.waitForTimeout(400)
-    const predRows = await page.locator('.acc-pred-row').count()
-    check('akordiyon açılınca oyuncu satırları', predRows > 0, `${predRows} satır`)
-    check('başlık açıkken aria-expanded=true', (await firstHead.getAttribute('aria-expanded')) === 'true')
-
-    // ikinci başlığı aç → yalnız 1 akordiyon açık kalır (openMatchId)
-    const secondHead = page.locator('.acc-head').nth(1)
-    if (await secondHead.count() > 0) {
-      await secondHead.click()
-      await page.waitForTimeout(400)
-      check('aynı anda tek akordiyon açık', (await page.locator('.acc-item.open').count()) === 1)
-    }
-
-    // oyuncu filtre çipi: açık akordiyon satırları tek oyuncuya iner
-    const chips = page.locator('.acc-chip')
-    if (await chips.count() > 1) {
-      await chips.nth(1).click()
-      await page.waitForTimeout(400)
-      const filteredRows = await page.locator('.acc-item.open .acc-pred-row').count()
-      check('oyuncu filtre çipi tek satır bırakır', filteredRows === 1, `${filteredRows} satır`)
-      await chips.nth(1).click()
-      await page.waitForTimeout(300)
-    } else {
-      console.log('  bilgi: oyuncu çipi yok → filtre testi atlandı')
-    }
-
-    // bir select değiştir → dirty satır + 'Kaydet (N)' aktif
-    const openSelect = page.locator('.acc-item.open .acc-pred-select').first()
-    if (await openSelect.count() > 0) {
-      const currentVal = await openSelect.inputValue()
-      const nextVal = currentVal === 'H' ? 'D' : 'H'
-      await openSelect.selectOption(nextVal)
-      try {
-        await page.waitForSelector('.acc-pred-row.dirty', { timeout: 5000 })
-        check('kirli oyuncu satırı vurgulanır', true)
-      } catch {
-        check('kirli oyuncu satırı vurgulanır', false, 'dirty satır görünmedi')
-      }
-      const saveBtn = page.locator('.acc-item.open .acc-save .btn').first()
-      const saveLabel = String((await saveBtn.textContent()) ?? '')
-      check('kaydet düğmesi sayı taşır', /Kaydet \(\d+\)/.test(saveLabel), saveLabel.trim())
-      check('kaydet düğmesi aktif', (await saveBtn.isDisabled()) === false)
-
-      // Kaydetme testi yalnız açık izinle (BROWSER_CHECK_ALLOW_SAVE=1) çalışır;
-      // aksi halde gerçek tahmin verisi değiştirilmez (lokal dev:db de gerçek
-      // Supabase'i kullanır!). Başarı: dirty vurgusu düşer + 'Kaydedildi' + toast.
-      if (process.env.BROWSER_CHECK_ALLOW_SAVE) {
-        await saveBtn.click()
-        try {
-          await page.waitForSelector('.toast', { timeout: 10000 })
-          check('kaydetme toastı', true)
-        } catch {
-          check('kaydetme toastı', false, '10s içinde toast görünmedi')
-        }
-        await page.waitForTimeout(400)
-        check('kayıt sonrası dirty düşer', (await page.locator('.acc-pred-row.dirty').count()) === 0)
-        const savedLabel = String((await page.locator('.acc-item.open .acc-save .btn').first().textContent()) ?? '')
-        check('kayıt sonrası düğme Kaydedildi', savedLabel.includes('Kaydedildi'), savedLabel.trim())
-      } else {
-        console.log('  bilgi: kaydetme testi atlandı (BROWSER_CHECK_ALLOW_SAVE yok — gerçek veri korunur)')
-        await page.reload()
-        await page.waitForTimeout(2500)
-      }
-    } else {
-      check('kirli oyuncu satırı vurgulanır', false, 'açık akordiyonda select yok')
-    }
-  } else {
-    check('akordiyon açılınca oyuncu satırları', false, 'akordiyon başlığı yok')
+// Yaklaşan filtresi + maçlı gün taraması: giriş formu yalnız BAŞLAMAMIŞ
+// maçlarda çıkar. Seçili ligde hiç yaklaşan maç günü bulunamazsa Süper Lig'e
+// geçilir (demo tohumu +26/+50/+74. saatlerde yaklaşan maç garanti eder).
+const findUpcomingRow = async () => {
+  await page.locator('.seg-item', { hasText: 'Yaklaşan' }).first().click()
+  await page.waitForTimeout(450)
+  if ((await page.locator('.match-row').count()) > 0) return page.locator('.match-row').first()
+  const cells = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') })
+  const cellCount = await cells.count()
+  for (let i = 0; i < cellCount; i += 1) {
+    await cells.nth(i).click()
+    await page.waitForTimeout(450)
+    if ((await page.locator('.match-row').count()) > 0) return page.locator('.match-row').first()
   }
-
-  // --- #21 Faz 3: admin lig seçici — editör günleri Süper Lig'e döner ---
-  const tslAdminSeg = page.locator('.admin-league-switch .seg-item', { hasText: 'Süper Lig' })
-  check('admin lig seçici render', (await tslAdminSeg.count()) === 1)
-  await tslAdminSeg.click()
-  await page.waitForTimeout(1500)
-  check('admin lig bağlamı Süper Lig', String((await page.locator('.admin-league-context').textContent()) ?? '').includes('Süper Lig'))
-  const tslEditorText = String((await page.locator('.admin-preds').textContent()) ?? '')
-  check('admin editör Süper Lig takımlarına döner', /Samsunspor|Başakşehir/.test(tslEditorText), 'tohum takımları görünmüyor')
-
-  // --- #21 Faz 3: hızlı tahmin girişi — boş açık maçlara taslak basar ---
-  const quickChips = page.locator('.acc-chip')
-  if ((await quickChips.count()) > 1) {
-    await quickChips.nth(1).click() // ilk oyuncu çipi (0 = Tümü)
-    await page.waitForTimeout(400)
-    const quickRow = await page.locator('.quick-fill').count()
-    check('hızlı giriş satırı görünür', quickRow === 1)
-    if (quickRow === 1) {
-      // Oyuncunun taslağı boş bir maç bul ve aç (tohum tahminli maçlar dolu).
-      let openedEmpty = false
-      const headTotal = await page.locator('.acc-head').count()
-      for (let i = 0; i < Math.min(headTotal, 6); i += 1) {
-        const head = page.locator('.acc-head').nth(i)
-        if ((await head.getAttribute('aria-expanded')) !== 'true') {
-          await head.click()
-          await page.waitForTimeout(400)
-        }
-        const openSel = page.locator('.acc-item.open .acc-pred-select').first()
-        if ((await openSel.count()) > 0 && (await openSel.inputValue()) === '') {
-          openedEmpty = true
-          break
-        }
-      }
-      const dirtyBefore = await page.locator('.acc-item.open .acc-pred-row.dirty').count()
-      await page.locator('.quick-fill .btn', { hasText: 'Ev sahibi' }).click()
-      await page.waitForTimeout(500)
-      const dirtyAfter = await page.locator('.acc-item.open .acc-pred-row.dirty').count()
-      check('hızlı giriş boş taslakları doldurur', openedEmpty ? dirtyAfter === dirtyBefore + 1 : true, openedEmpty ? `${dirtyAfter} kirli satır` : 'boş maç bulunamadı — atlandı')
-      check('hızlı giriş satırı dolunca gizlenir', (await page.locator('.quick-fill').count()) === 0)
-    }
-    await quickChips.nth(1).click() // filtre temizle
-    await page.waitForTimeout(300)
-  } else {
-    console.log('  bilgi: oyuncu çipi yok → hızlı giriş testi atlandı')
-  }
-
-  // Avrupa'ya dönüş — bağlam + editör geri döner.
-  await page.locator('.admin-league-switch .seg-item', { hasText: 'Avrupa' }).click()
-  await page.waitForTimeout(1500)
-  check('admin Avrupa dönüşü', String((await page.locator('.admin-league-context').textContent()) ?? '').includes('Avrupa'))
-
-  // oyuncular sekmesi
-  await page.locator('.admin-tab', { hasText: 'Oyuncular' }).click()
-  await page.waitForTimeout(500)
-  check('oyuncular sekmesi', (await page.locator('.player-form').count()) === 1)
-
-  // Avatar akışı (#17) — yalnız bellek-içi storage stub'lı demo sunucuda.
-  if (process.env.BROWSER_CHECK_TEST_AVATAR) {
-    // 64x64 geçerli PNG'yi sayfa canvas'ında üret (dosya yazmadan).
-    const pngDataUrl = await page.evaluate(() => {
-      const c = document.createElement('canvas')
-      c.width = 200
-      c.height = 180
-      const ctx = c.getContext('2d')
-      ctx.fillStyle = '#b8f34a'
-      ctx.fillRect(0, 0, 200, 180)
-      ctx.fillStyle = '#0c1a04'
-      ctx.beginPath()
-      ctx.arc(100, 90, 60, 0, Math.PI * 2)
-      ctx.fill()
-      return c.toDataURL('image/png')
-    })
-    const pngBuffer = Buffer.from(pngDataUrl.split(',')[1], 'base64')
-    const firstPhotoBtn = page.locator('.player-row button', { hasText: 'Fotoğraf' }).first()
-    if (await firstPhotoBtn.count() > 0) {
-      await firstPhotoBtn.click()
-      await page.waitForTimeout(400)
-      check('avatar modalı açılır', (await page.locator('.avatar-crop-modal').count()) === 1)
-      await page.locator('.avatar-file-input').setInputFiles({
-        name: 'test-avatar.png',
-        mimeType: 'image/png',
-        buffer: pngBuffer,
-      })
-      await page.waitForTimeout(600)
-      check('kırpma sahnesi görünür', (await page.locator('.avatar-stage').count()) === 1)
-      await page.locator('.avatar-crop-modal .btn', { hasText: 'Kırp ve kaydet' }).click()
-      let avatarSaved = false
-      try {
-        await page.waitForSelector('.toast', { timeout: 8000 })
-        avatarSaved = true
-      } catch {
-        avatarSaved = false
-      }
-      check('avatar kaydedilir', avatarSaved)
-      if (avatarSaved) {
-        await page.waitForTimeout(800)
-        const hasChangeBtn = await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()
-        check('oyuncu satırı foto gösterir', hasChangeBtn > 0)
-        const removeBtn = page.locator('.player-row button', { hasText: 'Kaldır' }).first()
-        if (await removeBtn.count() > 0) {
-          await removeBtn.click()
-          await page.waitForTimeout(1500)
-          const removed = (await page.locator('.player-row button', { hasText: 'Fotoğrafı değiştir' }).count()) === 0
-          check('avatar kaldırılır', removed)
-        }
-      }
-    } else {
-      check('avatar modalı açılır', false, 'Fotoğraf düğmesi yok')
-    }
-  } else {
-    console.log('  bilgi: avatar akışı atlandı (BROWSER_CHECK_TEST_AVATAR yok — gerçek DB bucket ister)')
-  }
-
-  // puanlama sekmesi
-  await page.locator('.admin-tab', { hasText: 'Puanlama' }).click()
-  await page.waitForTimeout(500)
-  check('puanlama sekmesi', (await page.locator('.admin-scoring').count()) === 1)
-
-  // veri sekmesi + manuel senkron toastı
-  await page.locator('.admin-tab', { hasText: 'Veri' }).click()
-  await page.waitForTimeout(500)
-  check('veri sekmesi', (await page.locator('.data-grid').count()) === 1)
-  const syncBtn = page.locator('.admin-data .btn', { hasText: 'Şimdi senkronize et' })
-  if (await syncBtn.count() > 0) {
-    await syncBtn.click()
-    try {
-      await page.waitForSelector('.toast', { timeout: 25000 }) // ESPN çekimi değişken sürebilir
-      check('manuel senkron toastı', true)
-    } catch {
-      check('manuel senkron toastı', false, '25s içinde toast görünmedi')
-    }
-    // #21 Faz 3: senkron yanıtı lig bazlı `leagues` detayı taşır → satırlar.
-    await page.waitForTimeout(600)
-    const leagueLines = await page.locator('.sync-league-line').count()
-    check('senkron lig bazlı satırlar', leagueLines === 2, `${leagueLines} satır`)
-  } else {
-    check('manuel senkron toastı', false, 'senkron düğmesi yok')
-  }
-} else {
-  check('admin girişi başarılı', false, 'login ekranı görünmedi')
+  return null
 }
 
-// --- 6b) Yönetimden çıkış (#20): header düğmesi oturumu kapatır, tema kalkar ---
-if ((await page.locator('.admin-exit').count()) > 0) {
-  await page.locator('.admin-exit').click()
+let upcomingRow = await findUpcomingRow()
+let switchedToTsl = false
+if (!upcomingRow) {
+  const tslSwitch = page.locator('.league-switch .seg-item', { hasText: 'Süper Lig' })
+  if ((await tslSwitch.count()) > 0) {
+    await tslSwitch.click()
+    await page.waitForTimeout(2500)
+    switchedToTsl = true
+    upcomingRow = await findUpcomingRow()
+  }
+}
+check('yaklaşan maç bulunur', upcomingRow !== null, switchedToTsl ? 'Süper Lig tohum maçı' : '')
+
+if (upcomingRow) {
+  await upcomingRow.click()
   await page.waitForTimeout(500)
-  check('çıkış admin modunu kapatır', (await page.evaluate(() => document.body.classList.contains('admin-mode'))) === false)
-  check('giriş ekranı döner', (await page.locator('.admin-login-card').count()) === 1)
-} else {
-  check('çıkış admin modunu kapatır', false, 'header çıkış düğmesi yok (oturum açık değildi mi?)')
+  check('giriş formu açılır', (await page.locator('.match-acc-body .entry-form').count()) === 1)
+  const entryRows = await page.locator('.entry-row').count()
+  check('tüm oyuncular giriş satırı', entryRows > 0, `${entryRows} satır`)
+  await noOverflow('giriş formu')
+
+  // "girdi" rozeti OLMAYAN ilk satır → kayıt sonrası rozet bu satırda belirir.
+  const badgesBefore = await page.locator('.entry-badge').count()
+  const badgeless = page.locator('.entry-row').filter({ hasNot: page.locator('.entry-badge') }).first()
+  const target = (await badgeless.count()) > 0 ? badgeless : page.locator('.entry-row').first()
+  const targetName = String((await target.locator('.entry-name').textContent()) ?? '').trim()
+
+  await target.locator('.entry-seg-btn').first().click() // 1 (ev sahibi)
+  await page.waitForTimeout(350)
+  check('kirli giriş satırı vurgulanır', (await page.locator('.entry-row.dirty').count()) >= 1)
+
+  const saveBtn = page.locator('.entry-save .btn').first()
+  const saveLabel = String((await saveBtn.textContent()) ?? '')
+  check('kaydet düğmesi sayı taşır', /Kaydet \(\d+\)/.test(saveLabel), saveLabel.trim())
+  check('kaydet düğmesi aktif', (await saveBtn.isDisabled()) === false)
+
+  // Kaydet → toast + sessiz tazeleme → dirty düşer + "girdi" rozeti belirir.
+  await saveBtn.click()
+  let savedToast = false
+  try {
+    await page.locator('.toast', { hasText: 'Tahminler kaydedildi' }).waitFor({ timeout: 10000 })
+    savedToast = true
+  } catch {
+    savedToast = false
+  }
+  check('kaydetme toastı', savedToast)
+  await page.waitForTimeout(1500)
+  check('kayıt sonrası dirty düşer', (await page.locator('.entry-row.dirty').count()) === 0)
+  const badgesAfter = await page.locator('.entry-badge').count()
+  check(
+    'girdi rozeti görünür',
+    badgesBefore === 0 ? badgesAfter >= 1 : badgesAfter === badgesBefore + 1,
+    `${badgesBefore}→${badgesAfter} rozet · ${targetName}`
+  )
+
+  // "+ Oyuncu" akışı: satır içi form → probe- isim → Ekle → toast → satır.
+  await page.locator('.entry-add').click()
+  await page.waitForTimeout(350)
+  check('oyuncu formu açılır', (await page.locator('.entry-player-form.open').count()) === 1)
+  const probeName = `probe-${Date.now().toString(36)}`
+  await page.locator('.entry-player-form input').fill(probeName)
+  await page.locator('.entry-color-chip').nth(2).click()
+  await page.locator('.entry-player-form .btn', { hasText: 'Ekle' }).click()
+  let playerToast = false
+  try {
+    await page.locator('.toast', { hasText: 'Oyuncu eklendi' }).waitFor({ timeout: 10000 })
+    playerToast = true
+  } catch {
+    playerToast = false
+  }
+  check('oyuncu ekleme toastı', playerToast)
+  await page.waitForTimeout(1500)
+  check('yeni oyuncu satırı düşer', (await page.locator('.entry-row', { hasText: probeName }).count()) === 1)
+
+  // Temizlik: probe oyuncunun tahmini yoktur → DELETE /api/players ile sil.
+  const cleanup = await page.evaluate(async name => {
+    const res = await fetch('/api/league', { cache: 'no-store' })
+    const data = await res.json()
+    const player = (data.players ?? []).find(p => p.name === name)
+    if (!player) return { ok: false, why: 'oyuncu payloadda bulunamadı' }
+    const del = await fetch('/api/players', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: player.id }),
+    })
+    return { ok: del.ok, why: `HTTP ${del.status}` }
+  }, probeName)
+  check('probe oyuncu temizlenir', cleanup.ok, cleanup.why)
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  check('Escape akordiyonu kapatır (giriş)', (await page.locator('.match-acc-body').count()) === 0)
+}
+
+// Süper Lig'e geçildiyse Avrupa'ya dön (tur sonu EU bağlamında bitsin).
+if (switchedToTsl) {
+  await page.locator('.league-switch .seg-item', { hasText: 'Avrupa' }).click()
+  await page.waitForTimeout(2000)
 }
 
 // --- 7) Sayfa hataları (tur sonunda tekrar) ---

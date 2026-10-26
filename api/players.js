@@ -38,7 +38,11 @@ export async function createPlayer(supabase, request) {
 
   const { data: player, error } = await supabase
     .from('players')
-    .insert({ name, color })
+    // is_active açıkça yazılır: üretimde kolon default'u true olur ama
+    // bellek-içi demo istemcisi (scripts/demo-server.mjs) default uygulamaz —
+    // yazılmazsa yeni oyuncu public payload'ın aktif filtresine takılıp
+    // kaybolur (#24 Faz 2 browser-check'te yakalandı).
+    .insert({ name, color, is_active: true })
     .select('id, name, color, is_active')
     .single()
   if (error) {
