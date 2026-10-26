@@ -8,6 +8,16 @@ import { chromium } from 'playwright'
 
 const BASE = process.env.BROWSER_CHECK_URL || 'http://localhost:8787'
 
+// #24 güvenlik bekçisi: tur TAHMİN YAZAR (Kaydet, + Oyuncu, DELETE temizliği).
+// Yanlışlıkla gerçek bir ortama (dev:db = canlı Supabase, üretim) karşı
+// koşulmasın — yalnız localhost'a izinlı; uzak hedef ancak bilinçli
+// BROWSER_CHECK_ALLOW_REMOTE=1 ile koşar.
+const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(BASE)
+if (!isLocal && process.env.BROWSER_CHECK_ALLOW_REMOTE !== '1') {
+  console.error(`Red: BROWSER_CHECK_URL uzak hedef (${BASE}) — tur tahmin yazar. Onay için BROWSER_CHECK_ALLOW_REMOTE=1.`)
+  process.exit(1)
+}
+
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok })

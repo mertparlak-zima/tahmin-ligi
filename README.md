@@ -6,21 +6,28 @@ Arkadaş grubu için futbol tahmin ligi. İki ayrı lig üzerinde oynanır:
   Beşiktaş'ın Avrupa Ligi, Trabzonspor'un Konferans Ligi maçları.
 - **Süper Lig (TSL)** — TÜM Süper Lig fikstürü (yalnız 4 büyük takım değil).
 
-Herkes siteyi salt-okunur takip eder; tahminleri yönetici panelinden girer.
-Maç sonuçları otomatik güncellenir, puan tablosu kendiliğinden hesaplanır.
-Oyuncular iki ligde ortaktır; puan tabloları ve fikstürler lig bazlıdır.
+Herkes siteyi takip eder **ve kendi tahminini girer** — yönetici paneli yoktur (#24).
+Tahmin girişi maç akordiyonundadır: güne tıkla → maça tıkla → oyuncular Ev/Beraberlik/
+Deplasman seçenekleriyle listelenir → seçimleri yap → Kaydet. Maç sonuçları otomatik
+güncellenir, puan tablosu kendiliğinden hesaplanır. Oyuncular iki ligde ortaktır;
+puan tabloları ve fikstürler lig bazlıdır.
+
+> Güvenlik notu: tahmin/oyuncu uçları şifresizdir; siteye erişim Vercel
+> Deployment Protection ile sınırlıdır. Korumayı kaldırırsan linki olan herkes
+> tahmin yazabilir.
 
 ## Kurallar
 
 - Tahmin = maç sonucu (ev sahibi / beraberlik / değişen). Joker yok.
-- Doğru sonuç = 1 puan (panelden değiştirilebilir; puanlar her istekte
-  güncel kurala göre yeniden hesaplanır).
-- **Puanlama kuralı iki lig için de ortaktır** (tek `scoring` yapılandırması);
-  lig bazlı olan yalnızca sezonluk bonuslardır (`bonus:<lig>:<sezon>` anahtarı,
-  örn. `bonus:TSL:2026`).
-- **Tahminler maç başlayana kadar mühürlüdür**: kimin tahmin girdiği görünür,
-  tahminin kendisi maç başlayınca açılır.
-- Maç başladıktan sonra tahmin girilemez/değiştirilemez.
+- Doğru sonuç = 1 puan (puanlar her istekte güncel kurala göre yeniden
+  hesaplanır; kural tek ve sabittir, lig bazlı değildir). Bonus puan yoktur.
+- **Tahminler maç başlayana kadar mühürlüdür**: kimin tahmin girdiği görünür
+  ("girdi" rozeti), tahminin kendisi maç başlayınca açılır.
+- Maç başladıktan sonra tahmin girilemez/değiştirilemez (API 409 ile reddeder).
+- Akordiyonda herkes her oyuncu adına giriş yapabilir (tek telefondan toplu
+  giriş için); kickoff öncesi yapılan yeni kayıt eski tahminin ÜZERİNE yazar.
+- Yeni oyuncu akordiyondaki "+ Oyuncu" ile eklenir; avatar oyuncu detay
+  ekranından yüklenir.
 - Puan tablosunda takım bazlı doğru sayıları (FB/GS/BJK/TS) da izlenir
   (Avrupa ligi görünümünde; Süper Lig görünümünde isabet yüzdesi vardır).
 
@@ -29,7 +36,7 @@ Oyuncular iki ligde ortaktır; puan tabloları ve fikstürler lig bazlıdır.
 | Katman | Teknoloji |
 | --- | --- |
 | Arayüz | [Gea](https://geajs.com/) (compiler-first reactive UI) + Vite |
-| API | Vercel serverless functions (`api/league.js`, `api/admin.js`) |
+| API | Vercel serverless functions (`api/league.js`, `api/predictions.js`, `api/players.js`) |
 | Veritabanı | Supabase (Postgres, free tier) — yalnız server-side erişim |
 | Maç verisi | ESPN public scoreboard API (token gerekmez) |
 
@@ -44,8 +51,8 @@ bir** (canlı maç varken 30 sn'de bir; gece 01–08 arası maç yokken 5 dk'da 
 sessizce yenilenir; maç geceleri veri bu sayede kendiliğinden taze kalır.
 Dönüş ziyaretlerde ilk ekran `sessionStorage` önbelleğinden **anında** gelir
 ve arka planda tazelenir (stale-while-revalidate); içerik değişmediğinde
-sunucu ETag/If-None-Match ile gövdesiz **304** yanıtı döner. Yönetim panelinde
-ayrıca manuel senkron düğmesi vardır.
+sunucu ETag/If-None-Match ile gövdesiz **304** yanıtı döner. (#24 ile manuel
+senkron düğmesi kaldırıldı — lazy senkron + bayatlık bandı yeterlidir.)
 
 ### Sağlamlık kuralları
 
@@ -88,10 +95,10 @@ SQL önce işlenirse mevcut Avrupa verisi etkilenmez (varsayılan lig `EU`).
 | --- | --- |
 | `SUPABASE_URL` | Supabase proje URL'i |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role anahtarı (yalnız server'da) |
-| `ADMIN_PASSWORD` | Yönetim paneli şifresi (güçlü seç) |
 
-Bu üçü zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
-env'e girilmezse kod içindeki varsayılanlarla çalışır.
+Bu ikisi zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
+env'e girilmezse kod içindeki varsayılanlarla çalışır. (#24 ile `ADMIN_PASSWORD`
+kaldırıldı — eski dağıtımlarda env'de kalması zararsızdır, okunmaz.)
 
 3. Deploy. İlk ziyarette fikstür otomatik çekilir.
 
@@ -100,7 +107,7 @@ env'e girilmezse kod içindeki varsayılanlarla çalışır.
 ```bash
 npm run build             # üretim derlemesi (src değişince mutlaka)
 npm run dev               # yalnız arayüz (HMR; API için dev:api gerekir)
-npm run dev:api           # in-memory demo API — DB gerekmez, şifre: demo123
+npm run dev:api           # in-memory demo API — DB gerekmez, tahmin girişi açık
 npm run dev:db            # GERÇEK Supabase'li tam yığın (8787; .env gerekli)
 npm run demo              # build + in-memory demo sunucu
 npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
@@ -114,12 +121,12 @@ npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
 ### Testler
 
 ```bash
-node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (giriş/mühür/kilit/benzersizlik)
-node --env-file=.env scripts/browser-check.mjs  # headless Chromium UI turu (sayfalar, sheet, admin)
-node scripts/tests/server.test.mjs              # sunucu katmanı (offline; espn/payload/admin/sync)
-node scripts/smoke-espn.mjs                     # gerçek ESPN çekimi (30 maç beklenir)
-node scripts/smoke-league.mjs                   # payload + puanlama + mühür (mock)
-node scripts/smoke-sync.mjs                     # upsert/anti-regression/prune (mock)
+node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (oyuncu ekle/mühür/kilit/benzersizlik)
+node scripts/browser-check.mjs                   # headless Chromium UI turu (akordiyon tahmin girişi dahil; yalnız localhost)
+node scripts/tests/server.test.mjs               # sunucu katmanı (offline; espn/payload/predictions/players/sync)
+node scripts/smoke-espn.mjs                      # gerçek ESPN çekimi (30 maç beklenir)
+node scripts/smoke-league.mjs                    # payload + puanlama + mühür (mock)
+node scripts/smoke-sync.mjs                      # upsert/anti-regression/prune (mock)
 ```
 
 Agent kuralları ve öğrenilen Gea kısıtları için `AGENTS.md`; upstream'e
@@ -139,35 +146,31 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 - **Temalar/logolar**: her lig kendi zemin logosunu kullanır
   (`public/logos/eu.svg`, `public/logos/tsl.svg`); gerçek logoyla aynı adla
   dosyayı değiştirmek yeterlidir.
-- **Yönetim** (`/admin`): topbar'daki kilit düğmesinden (oturum açıksa "Panel")
-  veya footer'daki linkten; şifre ile giriş.
-  - *Lig seçici*: panel tüm sekmelerde Avrupa ↔ Süper Lig arasında geçer;
-    editör/fikstür o ligin maçlarına iner, taslaklar sıfırlanır.
-  - *Tahminler*: oyuncu seç, günlere gruplu maçlarda sonuç seç; kaydetme çubuğu
-    yalnız değişen satırları gönderir. Kilitli maçlar gri. Oyuncu filtresi
-    aktifken **hızlı giriş** düğmeleri boş tahminlere tek tıkla Ev sahibi /
-    Beraberlik / Deplasman basar (sonradan tek tek düzenlenebilir).
-  - *Oyuncular*: ekle / pasifleştir (pasif oyuncu listeden düşer, verisi kalır).
-  - *Puanlama*: etiket, durum (geçici/kesin), doğru sonuç puanı — kural iki
-    lig için de ortaktır, yalnız veritabanından yönetilir.
-  - *Veri*: senkronizasyon durumu + manuel senkron; yanıt lig bazlı satırlarla
-    (Avrupa/Süper Lig ayrı ayrı) listelenir.
+- **Tahmin girişi (#24)**: maç kartına dokun → akordiyon açılır → oyuncular
+  Ev/Beraberlik/Deplasman seçenekleriyle listelenir (kim girdiyse "girdi"
+  rozetidir; kickoff'a kadar tahminin kendisi gizli kalır). Seçimleri yap,
+  **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta akordiyon
+  açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"** ile
+  yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
+  "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
 
 ## API
+
+Tüm uçlar herkese açıktır (#24); ek koruma yoktur — erişim Vercel Deployment
+Protection ile sınırlıdır.
 
 | Yöntem | Yol | Açıklama |
 | --- | --- | --- |
 | `GET` | `/api/league?league=EU\|TSL` | Herkese açık lig verisi (lazy sync dahil; lig varsayılanı EU) |
-| `POST` | `/api/admin/login` | Şifre doğrulama |
-| `GET` | `/api/admin/bootstrap?league=` | Panel verisi (Bearer şifre; lig kapsamı) |
-| `PUT` | `/api/admin/predictions` | Tahmin kaydet/sil (batch, atomic) |
-| `POST` | `/api/admin/players` | Oyuncu ekle |
-| `PATCH` | `/api/admin/players` | Oyuncu güncelle (ad/renk/aktif) |
-| `DELETE` | `/api/admin/players` | Oyuncu sil (tahmini yoksa; #6 test temizliği) |
-| `POST` | `/api/admin/sync` | Manuel senkronizasyon (iki lig paralel; yanıtta `leagues` detayı) |
+| `PUT` | `/api/predictions` | Tahmin kaydet/sil (batch, atomic; başlamış maçta 409) |
+| `POST` | `/api/players` | Oyuncu ekle (isim 2-40, küçük-harf benzersizlik, renk) |
+| `PATCH` | `/api/players` | Oyuncu güncelle (ad/renk/aktif) |
+| `DELETE` | `/api/players` | Oyuncu sil (tahmini yoksa) |
+| `POST` | `/api/players/avatar` | Avatar yükle (kırpılmış görsel, Storage'a) |
+| `DELETE` | `/api/players/avatar` | Avatar kaldır |
 
-Yönetim uçları `Authorization: Bearer <ADMIN_PASSWORD>` başlığı ister.
-Cookie/session yoktur; şifre tarayıcı sekmesi kapatılınca unutulur.
+`PUT /api/predictions` gövdesi: `{playerId, items:[{matchId, outcome}]}` —
+`outcome: ''` tahmini siler; batch atomic'tir (bir kilitli maç tüm grubu reddettirir).
 
 ## Proje yapısı
 
@@ -179,8 +182,8 @@ public/logos/   Lig zemin logoları (eu.svg, tsl.svg — aynı adla değiştiril
 supabase/       Veritabanı şeması + migrations
 scripts/        Duman testleri
 src/
-  stores/       league-store (veri+polling), ui-store, admin-store
-  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş, Admin (+admin sekmeleri)
+  stores/       league-store (veri+polling), ui-store, predictions-store, avatar-store
+  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş
   components/   DateStrip, MatchRow, MatchSheet, StandingsTable, Podium, ...
 ```
 
@@ -210,10 +213,9 @@ tahminler (tüm sütunlar) ve `app_config` satırları (puanlama kuralı, sezonl
 bonuslar). Geri yükleme idempotent upsert'tir; hiçbir satır silinmez, tahminin
 geri gelmesi için bağlı maçın DB'de mevcut olması yeterlidir.
 
-Ne zaman alınmalı: `#18` implementasyon adımlarından önce ve büyük maç
-haftalarının sonunda. Yönetim panelindeki "son yedek" damgası
-`app_config` tablosundaki `last_backup` anahtarından okunur; bu damgayı
-`backup-db.mjs` yazar.
+Ne zaman alınmalı: büyük değişikliklerden önce ve büyük maç haftalarının
+sonunda. `app_config` tablosundaki `last_backup` damgasını
+`backup-db.mjs` yazar (#24 sonrası panelde gösterimi yoktur; yedek CLI işidir).
 
 ## Faz 2 fikirleri
 
