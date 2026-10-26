@@ -1,6 +1,6 @@
-// Oyuncular (#20 U8): kimlik seçimi ZORUNLU DEĞİL — tüm oyuncuların kartları
-// listelenir; karta tıklayınca o oyuncunun karne detayı (sayfa içi görünüm).
-// "Bu benim" işaretleme isteğe bağlıdır (SEN vurguları için).
+// Oyuncular (#20 U8 + #24): kimlik/"Bu benim" akışı KALDIRILDI (panel-siz
+// modelde herkes herkes için girer; kart listesi + detay yeter). Karta
+// tıklayınca o oyuncunun karne detayı açılır.
 // Gea: class component, erken return yok; türetilmiş listeler store'da
 // (ui-store playerMatches/missingMatches, league-store playerPredictionStats).
 
@@ -102,9 +102,7 @@ class PlayerDetail extends Component {
           </div>
           {uiStore.identityId === playerId ? (
             <span class="you-tag">SEN</span>
-          ) : (
-            <button class="btn ghost sm" click={() => uiStore.setIdentity(playerId)}>Bu benim</button>
-          )}
+          ) : null}
         </div>
         <AvatarCropModal />
 
@@ -192,9 +190,6 @@ export default class PlayersPage extends Component {
           <div>
             <div class="page-meta">
               <span class="meta-main">{standings.length} oyuncu · tahminler</span>
-              <button class="btn ghost sm" click={() => uiStore.openIdentityModal()}>
-                {uiStore.identityId ? 'Kimliği değiştir' : 'Benim tahminlerim'}
-              </button>
             </div>
 
             <div class="players-grid">

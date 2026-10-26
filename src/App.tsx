@@ -4,7 +4,6 @@ import leagueStore from './stores/league-store'
 import uiStore from './stores/ui-store'
 import TopBar from './components/TopBar'
 import MainNav from './components/MainNav'
-import IdentityModal from './components/IdentityModal'
 import DatePreviewPopover from './components/DatePreviewPopover'
 import Toasts from './components/Toasts'
 
@@ -17,7 +16,6 @@ export default class App extends Component {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         uiStore.closeMatchAccordion()
-        uiStore.closeIdentityModal()
       }
     })
     // #21 Faz 2: lig teması body sınıfı — ilk değer (localStorage'dan gelen
@@ -46,7 +44,6 @@ export default class App extends Component {
             <span>{leagueStore.data?.meta?.leagueName ?? 'Tahmin Ligi'} · arkadaşlar arası tahmin ligi</span>
             <span class="footer-right">Veri: ESPN</span>
           </footer>
-          <IdentityModal />
           <Toasts />
         </div>
         <DatePreviewPopover />

@@ -24,18 +24,25 @@ import predictionsStore from '../stores/predictions-store'
 import MatchRow from './MatchRow'
 import PredRow from './PredRow'
 import Avatar from './Avatar'
+import Crest from './Crest'
 import FormChips from './FormChips'
 import { cn } from '../utils/cn'
 
 /** Giriş formunun tek oyuncu satırı: avatar + isim + "girdi" rozeti +
- *  1/X/2 segment seçici + temizle. Seçim durumu yalnızca predictionsStore
- *  taslaklarından okunur (mühür nedeniyle mevcut değer bilinemez — bkv.
- *  predictions-store başlık notu). */
+ *  TAKIM LOGOLU segment seçici (#24 kullanıcı isteği: "FB kazanacak" tarzı
+ *  etiketler + crest; 1/X/2 yerine) + temizle. Seçim durumu yalnızca
+ *  predictionsStore taslaklarından okunur (mühür nedeniyle mevcut değer
+ *  bilinemez — bkv. predictions-store başlık notu). */
 class EntryRow extends Component {
-  template({ player, matchId, hasPick }: any) {
+  template({ player, match, hasPick }: any) {
+    const matchId = match.id
     const key = `${player.id}:${matchId}`
     const draft = predictionsStore.drafts[key] ?? ''
     const dirty = predictionsStore.isDirty(matchId, player.id)
+    // Kısa etiket (#24 kullanıcı isteği): "FB kazanacak" tarzı — TLA varsa
+    // onu ('FEN'), yoksa kısa ad (uzun adlar CSS'te kırpılır).
+    const homeTag = match.home.tla ?? match.home.short
+    const awayTag = match.away.tla ?? match.away.short
     return (
       <div class={cn('entry-row', dirty && 'dirty', uiStore.identityId === player.id && 'me')}>
         <Avatar
@@ -51,28 +58,30 @@ class EntryRow extends Component {
         {hasPick ? <span class="entry-badge">girdi</span> : null}
         <span class="entry-seg" role="group" aria-label={`Tahmin: ${player.name}`}>
           <button
-            class={cn('entry-seg-btn', draft === 'H' && 'on')}
-            title="Ev sahibi kazanır"
+            class={cn('entry-seg-btn team', draft === 'H' && 'on')}
+            title={`${match.home.name} kazanır`}
             aria-pressed={draft === 'H' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'H')}
           >
-            1
+            <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={14} />
+            <span class="entry-seg-label">{homeTag} kazanacak</span>
           </button>
           <button
-            class={cn('entry-seg-btn', draft === 'D' && 'on')}
+            class={cn('entry-seg-btn draw', draft === 'D' && 'on')}
             title="Beraberlik"
             aria-pressed={draft === 'D' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'D')}
           >
-            X
+            <span class="entry-seg-label">Beraberlik</span>
           </button>
           <button
-            class={cn('entry-seg-btn', draft === 'A' && 'on')}
-            title="Deplasman kazanır"
+            class={cn('entry-seg-btn team', draft === 'A' && 'on')}
+            title={`${match.away.name} kazanır`}
             aria-pressed={draft === 'A' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'A')}
           >
-            2
+            <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={14} />
+            <span class="entry-seg-label">{awayTag} kazanacak</span>
           </button>
         </span>
         {/* Temizle: taslak seçimi '' yapar (kaydedince tahmin silinir).
@@ -119,7 +128,7 @@ class EntryForm extends Component {
             <EntryRow
               key={player.id}
               player={player}
-              matchId={match.id}
+              match={match}
               hasPick={match.predictions.some((p: any) => p.playerId === player.id)}
             />
           ))}
@@ -162,7 +171,7 @@ class EntryForm extends Component {
         </div>
 
         <div class="entry-save">
-          <span class="entry-save-info">1: ev sahibi · X: beraberlik · 2: deplasman — yalnız bu maç için kaydedilir.</span>
+          <span class="entry-save-info">Takım rozetlerine dokun: kimin kazanacağını seç — yalnız bu maç için kaydedilir.</span>
           <button
             class="btn primary sm"
             disabled={dirtyCount === 0 || saving}

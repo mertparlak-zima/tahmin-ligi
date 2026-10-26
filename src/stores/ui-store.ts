@@ -1,14 +1,17 @@
-// UI durumu: maç detay sheet'i, kimlik seçimi, toast'lar.
+// UI durumu: maç detay akordiyonu, toast'lar. (#24 sonrası: "Kimsin?"
+// kimlik seçimi kaldırıldı — panel-siz modelde herkes herkes için girer;
+// identityId alanı kalır ama hiçbir yerde ayarlanmaz, okuyanlar inerttir.
+// Eski cihazlardaki kalıcı anahtar temizlenir.)
 
 import { Store } from '@geajs/core'
 import leagueStore from './league-store'
 import { dateKey } from '../utils/format'
 
-const IDENTITY_KEY = 'tahminligi.identity'
+const LEGACY_IDENTITY_KEY = 'tahminligi.identity'
 
 class UiStore extends Store {
-  identityModalOpen = false
   toasts: Array<{ id: number; message: string }> = []
+  /** #24: artık ayarlanamaz (modal/düğmeler kaldırıldı) — hep ''. */
   identityId = ''
   /** Oyuncular sayfası detay görünümü (#20 U8): '' = kart listesi. */
   selectedPlayerId = ''
@@ -19,32 +22,16 @@ class UiStore extends Store {
 
   private toastSeq = 0
 
-  private playerIndex: Record<string, any> = {}
-
   constructor() {
     super()
-    this.identityId = localStorage.getItem(IDENTITY_KEY) ?? ''
-    // Önbellek hidrasyonu (#16) data'yı gözlemciler kurulmadan önce
-    // doldurabiliyor; 304 yolu da data atlamadığı için observe tetiklenmez.
-    // Bu yüzden indeks HEMEN hem de her data değişiminde yeniden kurulur.
-    const rebuildIndex = () => {
-      const players: any[] = leagueStore.data?.players ?? []
-      this.playerIndex = Object.fromEntries(players.map(p => [p.id, p]))
-      if (this.identityId && !this.playerIndex[this.identityId]) {
-        this.identityId = ''
-        localStorage.removeItem(IDENTITY_KEY)
-      }
+    try {
+      localStorage.removeItem(LEGACY_IDENTITY_KEY)
+    } catch {
+      // private mod — sorun değil
     }
-    rebuildIndex()
-    leagueStore.observe('data', rebuildIndex)
-  }
-
-  openIdentityModal() {
-    this.identityModalOpen = true
-  }
-
-  closeIdentityModal() {
-    this.identityModalOpen = false
+    // Not (#16 tarihi): burada eskiden data-observe ile oyuncu indeksi
+    // kuruluyordu (kimlik doğrulaması için) — #24 ile kimlik akışı kalkınca
+    // indeks de kaldırıldı.
   }
 
   /** Oyuncular detay görünümü (#20 U8): store metoduyla yazım — dışarıdan
@@ -77,16 +64,8 @@ class UiStore extends Store {
     this.datePreviewKey = ''
   }
 
-  setIdentity(playerId: string) {
-    this.identityId = playerId
-    if (playerId) localStorage.setItem(IDENTITY_KEY, playerId)
-    else localStorage.removeItem(IDENTITY_KEY)
-    this.identityModalOpen = false
-  }
-
-  get identity(): any | null {
-    return this.playerIndex[this.identityId] ?? null
-  }
+  // #24: setIdentity/openIdentityModal/closeIdentityModal ve identityModalOpen
+  // kaldırıldı (kimlik akışı yok); "identity" getter'ı da kullanımsızlaştı.
 
   /** Oyuncunun açılmış tahminleri: bitmişler (yeniden eskiye) + başlamışlar (yakına). */
   playerMatches(playerId: string): any[] {

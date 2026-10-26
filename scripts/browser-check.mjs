@@ -64,18 +64,40 @@ if (process.env.BROWSER_CHECK_TEST_STALE) {
   check('bayatlık bandı yanlış alarm yok', bandOpen === 0)
 }
 
-// --- 1b) Ay takvimi (#19) ---
+// --- 1b) Takvim: varsayılan KOMPAKT (kullanıcı raporu: ilk ekranda maçlar
+// görünmeli, ay ızgarası değil) + genişletince 6x7 ızgara ---
 const calRoot = await page.locator('.cal-root').count()
-check('ay takvimi render', calRoot === 1)
+check('takvim kökü render', calRoot === 1)
+const compactBar = await page.locator('.cal-compact').count()
+check('takvim varsayılan kompakt', compactBar === 1)
+const gridVisible = await page.locator('.cal-grid').count()
+check('ay ızgarası kapalı', gridVisible === 0)
+check('ilk açılışta otomatik kaydırma yok', await page.evaluate(() => window.scrollY === 0), `scrollY=${await page.evaluate(() => window.scrollY)}`)
+const filterVisible = await page.evaluate(() => {
+  const el = document.querySelector('.filter-bar')
+  if (!el) return false
+  const top = el.getBoundingClientRect().top
+  return top >= 0 && top < window.innerHeight
+})
+check('maç listesi ilk ekranda görünür (kaydırmasız)', filterVisible)
+// genişletme: kompakt etikete tıkla → 6x7 ızgara + bugün vurgusu
+await page.locator('.cal-compact-label').click()
+await page.waitForTimeout(400)
 const calCells = await page.locator('.cal-cell').count()
 check('takvim 6x7 hücre', calCells === 42, `${calCells} hücre`)
 const todayCells = await page.locator('.cal-cell.today').count()
 check('bugün hücresi vurgulu', todayCells === 1)
 const calChips = await page.locator('.cal-chip').count()
 check('fikstür chipleri render', calChips > 0, `${calChips} chip`)
+// kapat → kompakt geri döner
+await page.locator('.cal-nav[aria-label="Takvimi kapat"]').click()
+await page.waitForTimeout(300)
+check('takvim kapanınca kompakt döner', (await page.locator('.cal-compact').count()) === 1)
 await noOverflow('maçlar')
 
-// --- 1b2) #21 UI: takvim başlık/ok boyutları (kullanıcı geri bildirimi) ---
+// --- 1b2) #21 UI: genişletilmiş takvim başlık/ok boyutları (kullanıcı geri bildirimi) ---
+await page.locator('.cal-compact-label').click()
+await page.waitForTimeout(300)
 const calTitlePx = await page.evaluate(() =>
   parseFloat(getComputedStyle(document.querySelector('.cal-title')).fontSize)
 )
@@ -86,6 +108,9 @@ check(
   calNavBox != null && calNavBox.width >= 40 && calNavBox.height >= 40,
   calNavBox ? `${Math.round(calNavBox.width)}x${Math.round(calNavBox.height)}` : 'kutu yok'
 )
+// ızgarayı kapat — sonraki bölümler kompakt varsayılanla ilerlesin
+await page.locator('.cal-nav[aria-label="Takvimi kapat"]').click()
+await page.waitForTimeout(300)
 
 // --- 1c) Önbellek hidrasyonu + ETag (#16) ---
 // API bloklanınca sayfa sessionStorage önbelleğinden anında render etmeli
@@ -94,8 +119,14 @@ check(
 await page.route('**/api/league**', route => route.abort())
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
-const cachedChips = await page.locator('.cal-chip').count()
-check('önbellekten anında render (api bloklu)', cachedChips > 0, `${cachedChips} chip`)
+// Kompakt varsayılan sonrası: ızgara kapalıyken çip yoktur — önbellekten
+// ANINDA render kanıtı: kompakt bar + iskelet DEĞİL gerçek içerik (filtre
+// çubuğu) anında görünür. (Gün bazlı maç kartı sayısı lig/sezon gününe
+// göre 0 olabilir; eski çip sayımı ay-düzeyindeydi.)
+const cachedCompact = await page.locator('.cal-compact').count()
+const cachedFilter = await page.locator('.filter-bar').count()
+const cachedSkeleton = await page.locator('.page-skeleton').count()
+check('önbellekten anında render (api bloklu)', cachedCompact === 1 && cachedFilter === 1 && cachedSkeleton === 0, `bar=${cachedCompact} filtre=${cachedFilter} iskelet=${cachedSkeleton}`)
 check('hidrasyon sırasında bant yok', (await page.locator('.stale-band.open').count()) === 0)
 await page.unroute('**/api/league**')
 await page.locator('.icon-btn[aria-label="Yenile"]').click()
@@ -118,7 +149,10 @@ const etagTest = process.env.BROWSER_CHECK_TEST_STALE
     })
 check('ETag/If-None-Match 304', etagTest.ok, etagTest.why)
 
-// Maçlı bir gün seç (bugün maç olmayabilir)
+// Maçlı bir gün seç (bugün maç olmayabilir) — kompakt varsayılan sonrası
+// önce ızgarayı aç, maçlı hücreyi öyle seç.
+await page.locator('.cal-compact-label').click()
+await page.waitForTimeout(400)
 const dayWithMatches = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
 if (await dayWithMatches.count() > 0) await dayWithMatches.click()
 await page.waitForTimeout(500)
@@ -145,6 +179,7 @@ if (process.env.BROWSER_CHECK_TEST_STALE) {
 }
 
 // --- 2) Gün seçimi + ay gezinme (dinamik class değişimi) ---
+// Izgara önceki bölümden açık geliyor (kompakt varsayılan sonrası açıldı).
 const selectedCount = await page.locator('.cal-cell.selected').count()
 check('gün seçimi aktif sınıf alır', selectedCount === 1)
 
@@ -291,22 +326,14 @@ if (playerCards > 0) {
   check('oyuncu detayı açılır', (await page.locator('.identity-hero').count()) === 1)
   const detailStats = await page.locator('.stat-card').count()
   check('detay istatistik kartları', detailStats === 4, `${detailStats} kart`)
+  // #24 sonrası: "Bu benim"/kimlik akışı kaldırıldı — düğme bulunmamalı
+  check('kimlik düğmeleri kaldırıldı', (await page.locator('.identity-hero .btn', { hasText: 'Bu benim' }).count()) === 0)
   await page.locator('.players-back').click()
   await page.waitForTimeout(400)
   check('geri dönüş kart listesi', (await page.locator('.player-card').count()) === playerCards)
-  // "Bu benim" akışı → SEN vurguları (puan tablosu SEN kontrolü bunu kullanır)
-  await page.locator('.player-card').first().click()
-  await page.waitForTimeout(400)
-  const meBtn = page.locator('.identity-hero .btn', { hasText: 'Bu benim' })
-  if (await meBtn.count() > 0) {
-    await meBtn.click()
-    await page.waitForTimeout(400)
-  }
-  // puan tablosunda SEN satırı
+  check('"Benim tahminlerim" düğmesi kaldırıldı', (await page.locator('.page-meta .btn', { hasText: 'Benim tahminlerim' }).count()) === 0)
   await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
   await page.waitForTimeout(500)
-  const youTag = await page.locator('.you-tag').count()
-  check('puan tablosunda SEN satırı', youTag === 1)
 }
 
 // --- 5d) Lig değiştirici (#21 Faz 2): TSL teması + İsabet sütunu ---
@@ -437,9 +464,18 @@ const findUpcomingRow = async () => {
   await page.locator('.seg-item', { hasText: 'Yaklaşan' }).first().click()
   await page.waitForTimeout(450)
   if ((await page.locator('.match-row').count()) > 0) return page.locator('.match-row').first()
+  // Kompakt varsayılan (#24): ızgara kapalıysa aç. Yalnız BUGÜN VE SONRASI
+  // maçlı günler taranır (aria-label = gün anahtarı) — "Yaklaşan" filtresi
+  // açık kaldığından dönen satırlar giriş formu açacak maçlardır.
+  if ((await page.locator('.cal-compact-label').count()) > 0) {
+    await page.locator('.cal-compact-label').click()
+    await page.waitForTimeout(400)
+  }
+  const today = new Date().toISOString().slice(0, 10)
   const cells = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') })
-  const cellCount = await cells.count()
-  for (let i = 0; i < cellCount; i += 1) {
+  const keys = await cells.evaluateAll(nodes => nodes.map(n => n.getAttribute('aria-label') ?? ''))
+  for (let i = 0; i < keys.length; i += 1) {
+    if (!keys[i] || keys[i] < today) continue
     await cells.nth(i).click()
     await page.waitForTimeout(450)
     if ((await page.locator('.match-row').count()) > 0) return page.locator('.match-row').first()
