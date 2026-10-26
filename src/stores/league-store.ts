@@ -102,6 +102,7 @@ class LeagueStore extends Store {
       if (!payload?.meta?.season || !Array.isArray(payload?.matches)) return
       if (Date.now() - (parsed.savedAt ?? 0) > CACHE_MAX_AGE_MS) return
       this.data = payload
+      this.rememberLeagues(payload)
       this.etag = typeof parsed.etag === 'string' ? parsed.etag : ''
       this.hydratedFromCache = true
     } catch {
@@ -138,6 +139,7 @@ class LeagueStore extends Store {
       const payload = await res.json()
       if (seq !== this.seq) return
       this.data = payload
+      this.rememberLeagues(payload)
       this.error = null
       this.consecutiveFailures = 0
       this.hydratedFromCache = false
@@ -316,40 +318,81 @@ class LeagueStore extends Store {
     return this.monthSeasonCache[`${this.league}:${season}`] ?? this.data
   }
 
+  // --- #21 performans: takvim memoizasyonu ---
+  // Gea getter'ları HER erişimde yeniden değerlenir; 42 hücre ×
+  // calendarSummaries/calendarMatchesByDay TSL'nin ~306 maçında her filtre
+  // tıklamasında ~550 ms ana iş parçacığını bloklıyordu (profil: %28
+  // calendarMatchesByDay + %19 hücre render + %8 calendarSummaries).
+  // Referans-anahtarlı önbellek: geçerlilik kontrolü ilgili store alanını
+  // (calendarSource/data/calendarMonthKey) OKUDUĞU için reaktif bağımlılık
+  // zinciri aynen korunur — kaynak değişince önbellek kendiliğinden düşer.
+
+  private calWeeksCache: { monthKey: string; out: any } | null = null
+  private calByDayCache: { source: any; out: any } | null = null
+  private calSummariesCache: { monthKey: string; byDay: any; out: any } | null = null
+  private calStatsCache: { monthKey: string; byDay: any; out: any } | null = null
+  private byDayCache: { data: any; out: any } | null = null
+
   /** Ay matrisi — türetme store getter'ında (Gea kuralı 7); hücre anahtarları
-   *  ay bazlıdır: ay değişince tüm hücreler yeniden doğar (geçiş animasyonu). */
+   *  ay bazlıdır: ay değişince tüm hücreler yeniden doğar (geçiş animasyonu).
+   *  Ay bazlı önbellekli: monthMatrix saf fonksiyon, aynı ay aynı sonuç. */
   get calendarWeeks(): Array<Array<{ cellId: string; dayKey: string; day: number; inMonth: boolean }>> {
-    return monthMatrix(this.calendarMonthKey).map(week =>
-      week.map(cell => ({ cellId: `${this.calendarMonthKey}:${cell.dayKey}`, ...cell }))
+    const monthKey = this.calendarMonthKey
+    if (this.calWeeksCache?.monthKey === monthKey) return this.calWeeksCache.out
+    const out = monthMatrix(monthKey).map(week =>
+      week.map(cell => ({ cellId: `${monthKey}:${cell.dayKey}`, ...cell }))
     )
+    this.calWeeksCache = { monthKey, out }
+    return out
   }
 
-  /** Ayın maçlarını gün anahtarıyla grupla (kaynak: seçili ayın sezonu). */
+  /** Ayın maçlarını gün anahtarıyla grupla (kaynak: seçili ayın sezonu).
+   *  Kaynak (calendarSource) referansı değişmedikçe gruplama tekrar etmez. */
   get calendarMatchesByDay(): Record<string, any[]> {
+    const source = this.calendarSource
+    if (this.calByDayCache?.source === source) return this.calByDayCache.out
     const byDay: Record<string, any[]> = {}
-    for (const m of this.calendarSource?.matches ?? []) {
+    for (const m of source?.matches ?? []) {
       const key = dateKey(m.kickoff)
       ;(byDay[key] ??= []).push(m)
     }
+    this.calByDayCache = { source, out: byDay }
     return byDay
   }
 
-  /** Tüm görünür günlerin hücre özetleri — hücreler tek adım store erişimiyle okur. */
+  /** Tüm görünür günlerin hücre özetleri — hücreler tek adım store erişimiyle
+   *  okur. (ay + gün-gruplaması) referans çiftiyle önbelleklenir. */
   get calendarSummaries(): Record<string, any> {
+    const monthKey = this.calendarMonthKey
     const byDay = this.calendarMatchesByDay
+    if (
+      this.calSummariesCache?.monthKey === monthKey &&
+      this.calSummariesCache?.byDay === byDay
+    ) {
+      return this.calSummariesCache.out
+    }
     const out: Record<string, any> = {}
     for (const week of this.calendarWeeks) {
       for (const cell of week) {
         out[cell.dayKey] = summarizeDay(cell.dayKey, byDay[cell.dayKey] ?? [])
       }
     }
+    this.calSummariesCache = { monthKey, byDay, out }
     return out
   }
 
-  /** Ay özeti (#20 E1/E2): seçili ayın maç/canlı/bitti sayıları + bugün. */
+  /** Ay özeti (#20 E1/E2): seçili ayın maç/canlı/bitti sayıları + bugün.
+   *  Önbellek anahtarı calendarSummaries ile aynı referans çifti. */
   get calendarMonthStats(): { total: number; live: number; finished: number; todayCount: number } {
+    const monthKey = this.calendarMonthKey
     const byDay = this.calendarMatchesByDay
-    const prefix = this.calendarMonthKey
+    if (
+      this.calStatsCache?.monthKey === monthKey &&
+      this.calStatsCache?.byDay === byDay
+    ) {
+      return this.calStatsCache.out
+    }
+    const prefix = monthKey
     const today = todayKey()
     let total = 0
     let live = 0
@@ -364,7 +407,9 @@ class LeagueStore extends Store {
       }
       if (dayKey === today) todayCount = byDay[dayKey].length
     }
-    return { total, live, finished, todayCount }
+    const out = { total, live, finished, todayCount }
+    this.calStatsCache = { monthKey, byDay, out }
+    return out
   }
 
   onVisibilityGained() {
@@ -405,16 +450,20 @@ class LeagueStore extends Store {
     return this.monthSeasonCache[`${this.league}:${season}`] ?? this.data
   }
 
-  /** Gün anahtarı → o günün maçları (saat sırasına göre). Önizleme popover'ı için. */
+  /** Gün anahtarı → o günün maçları (saat sırasına göre). Önizleme popover'ı
+   *  için. data referansıyla önbellekli (#21 performans — TSL ~306 maç). */
   get matchesByDay(): Record<string, any[]> {
+    const data = this.data
+    if (this.byDayCache?.data === data) return this.byDayCache.out
     const byDay: Record<string, any[]> = {}
-    for (const m of this.data?.matches ?? []) {
+    for (const m of data?.matches ?? []) {
       const key = dateKey(m.kickoff)
       ;(byDay[key] ??= []).push(m)
     }
     for (const key of Object.keys(byDay)) {
       byDay[key].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
     }
+    this.byDayCache = { data, out: byDay }
     return byDay
   }
 
@@ -469,10 +518,22 @@ class LeagueStore extends Store {
     return this.data?.competitions ?? []
   }
 
-  /** #21 Faz 2: seçilebilir ligler (meta.leagues; meta gelene dek boş →
-   *  değiştirici gizli). Türetme store getter'ında (Gea kuralı 7). */
+  /** #21 UI: seçilebilir ligler. Payload'daki meta.leagues birincil
+   *  kaynaktır; lig geçişinde data=null olur (iskelet) — değiştiricinin
+   *  KAYBOLMAMASI için son görünen liste yedekte tutulur (kullanıcı
+   *  geri bildirimi: buton yok olup geri geliyordu). */
+  private leaguesSeen: Array<{ code: string; name: string }> = []
+
   get leagueOptions(): Array<{ code: string; name: string }> {
-    return this.data?.meta?.leagues ?? []
+    const fromPayload = this.data?.meta?.leagues ?? []
+    if (fromPayload.length > 0) return fromPayload
+    return this.leaguesSeen
+  }
+
+  /** meta.leagues'i kalıcı yedeğe al (load/hydrate başarı yolunda çağrılır). */
+  private rememberLeagues(payload: any) {
+    const leagues = payload?.meta?.leagues
+    if (Array.isArray(leagues) && leagues.length > 0) this.leaguesSeen = leagues
   }
 
   // --- #21 Faz 3: İsabet Şampiyonası + Haftanın Tahmincisi ---

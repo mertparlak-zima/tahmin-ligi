@@ -39,9 +39,12 @@ html {
 
 body {
   margin: 0;
+  /* #21: zemin ışımaları ligden bağımsız nötr — lig tonu --bg üzerinden
+     background-color transition'ıyla yumuşakça döner (gradient animasyonlanamaz;
+     eski lig-bazlı radial'lar sert geçiyordu). */
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(184, 243, 74, 0.07), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(57, 223, 178, 0.05), transparent 60%),
+    radial-gradient(900px 480px at 85% -10%, rgba(160, 190, 220, 0.06), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(160, 190, 220, 0.04), transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
@@ -49,6 +52,7 @@ body {
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   min-height: 100vh;
+  transition: background-color 0.45s ease, color 0.45s ease;
 }
 
 button {
@@ -105,9 +109,12 @@ body.admin-mode .brand-mark {
 
 body {
   margin: 0;
+  /* #21: zemin ışımaları ligden bağımsız nötr — lig tonu --bg üzerinden
+     background-color transition'ıyla yumuşakça döner (gradient animasyonlanamaz;
+     eski lig-bazlı radial'lar sert geçiyordu). */
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(184, 243, 74, 0.07), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(57, 223, 178, 0.05), transparent 60%),
+    radial-gradient(900px 480px at 85% -10%, rgba(160, 190, 220, 0.06), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(160, 190, 220, 0.04), transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
@@ -115,32 +122,45 @@ body {
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   min-height: 100vh;
+  transition: background-color 0.45s ease, color 0.45s ease;
 }
 
 /* ============================================================
    #21 Faz 2 — lig temaları + soluk zemin logosu
    ============================================================ */
 
-/* Tam ekran soluk lig logosu: gri tonlama + %5 opaklık; tıklama hiçbir
-   zaman kesilmesin (pointer-events:none). Statik CSS — Gea kuralı 10:
-   dinamik attr/URL bağlama yok, lig seçimi body sınıfından gelir. */
-body::before {
+/* Tam ekran soluk lig logosu: İKİ sabit katman (before=EU, after=TSL)
+   opacity crossfade ile yumuşakça geçer (background-image animasyonlanamaz;
+   kullanıcı geri bildirimi: lig geçişi sertti). Gri tonlama + çok düşük
+   opaklık; tıklama hiçbir zaman kesilmesin (pointer-events:none). Statik
+   CSS — Gea kuralı 10: dinamik attr/URL bağlama yok. */
+body::before,
+body::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   background: no-repeat center/contain;
-  opacity: 0.05;
   filter: grayscale(1);
+  opacity: 0;
+  transition: opacity 0.5s ease;
 }
 
-body.league-eu::before {
+body::before {
   background-image: url('/logos/eu.svg');
 }
 
-body.league-tsl::before {
+body::after {
   background-image: url('/logos/tsl.svg');
+}
+
+body.league-eu::before {
+  opacity: 0.05;
+}
+
+body.league-tsl::after {
+  opacity: 0.06;
 }
 
 /* Tüm uygulama içeriği soluk logonun ÜSTÜNDE. .app-root pozitif
@@ -152,16 +172,26 @@ body.league-tsl::before {
   z-index: 1;
 }
 
-/* Avrupa teması: UEFA mavisi aksan; zemin ışımaları mavi tonlarına kayar.
-   :root koyu stadyom tabanı ortak — yalnız farklılaşan override edilir. */
+/* Lig geçişinde renkler yumuşak dönsün: aksan yüzeylerinde kısa renk
+   geçişleri. Kendi transition'ı olan seçiciler (sınıf spesifikliği)
+   bu genel kuralı ezer; animasyonlar (iskelet nabzı vb.) etkilenmez. */
+.app-root,
+.app-root * {
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease;
+}
+
+/* Avrupa teması: UEFA mavisi aksan + hafif mavi zemin tonu (--bg). */
 body.league-eu {
   --accent: #6db6ff;
   --accent-hi: #8fc9ff;
   --ink: #071527;
-  background:
-    radial-gradient(900px 480px at 85% -10%, rgba(109, 182, 255, 0.08), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(74, 138, 208, 0.06), transparent 60%),
-    var(--bg);
+  --bg: #071320;
 }
 
 body.league-eu .brand-mark {
@@ -170,15 +200,12 @@ body.league-eu .brand-mark {
 }
 
 /* Süper Lig teması: kırmızı aksan (canlı göstergesi --live ile ton
-   ayrımı korur); zemin ışımaları kırmızıya döner. */
+   ayrımı korur) + hafif kızıl zemin tonu. */
 body.league-tsl {
   --accent: #ff4a5e;
   --accent-hi: #ff7080;
   --ink: #2a060c;
-  background:
-    radial-gradient(900px 480px at 85% -10%, rgba(255, 74, 94, 0.08), transparent 60%),
-    radial-gradient(700px 420px at -10% 30%, rgba(206, 62, 82, 0.06), transparent 60%),
-    var(--bg);
+  --bg: #1c0b10;
 }
 
 body.league-tsl .brand-mark {

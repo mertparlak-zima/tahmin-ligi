@@ -312,8 +312,11 @@ if ((await tslSegment.count()) > 0) {
   await page.locator('.standings-view-switch .seg-item', { hasText: 'Lig' }).first().click()
   await page.waitForTimeout(500)
   check('lig görünümüne dönüş', (await page.locator('.standings-table').count()) === 1)
-  const tslLogo = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage)
-  check('TSL soluk zemin logosu', tslLogo.includes('/logos/tsl.svg'), String(tslLogo).slice(0, 64))
+  const tslLogo = await page.evaluate(() => {
+    const cs = getComputedStyle(document.body, '::after')
+    return { img: cs.backgroundImage, opacity: cs.opacity }
+  })
+  check('TSL soluk zemin logosu', tslLogo.img.includes('/logos/tsl.svg') && Number(tslLogo.opacity) > 0, JSON.stringify(tslLogo).slice(0, 80))
   // TSL tek turnuva → kupalar seçici gizli olmalı.
   await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
   await page.waitForTimeout(700)
@@ -338,13 +341,19 @@ if ((await tslSegment.count()) > 0) {
   }
   await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
   await page.waitForTimeout(600)
-  // Avrupa'ya dön: tema + FB sütunu + logo geri gelmeli.
+  // #21 UI düzeltmesi: lig geçişinde değiştirici kaybolmamalı — TSL'e geçiş
+  // isteği gönderilmişken (data=null iskelet fazı) switch row hâlâ DOM'da.
   await page.locator('.league-switch .seg-item', { hasText: 'Avrupa' }).click()
+  await page.waitForFunction(() => document.body.classList.contains('league-eu'), undefined, { timeout: 5000 })
+  check('lig geçişinde değiştirici kaybolmaz', (await page.locator('.league-switch').count()) === 1)
   await page.waitForTimeout(2500)
   check('Avrupa dönüşü body sınıfı', (await page.evaluate(() => document.body.classList.contains('league-eu'))) === true)
   check('Avrupa dönüşünde FB sütunu', (await page.locator('.standings-table th', { hasText: 'FB' }).count()) === 1)
-  const euLogo = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage)
-  check('Avrupa soluk zemin logosu', euLogo.includes('/logos/eu.svg'), String(euLogo).slice(0, 64))
+  const euLogo = await page.evaluate(() => {
+    const cs = getComputedStyle(document.body, '::before')
+    return { img: cs.backgroundImage, opacity: cs.opacity }
+  })
+  check('Avrupa soluk zemin logosu', euLogo.img.includes('/logos/eu.svg') && Number(euLogo.opacity) > 0, JSON.stringify(euLogo).slice(0, 80))
 } else {
   check('lig değiştirici görünür', false, 'Süper Lig segmenti yok (meta.leagues gelmedi mi?)')
 }
