@@ -484,29 +484,51 @@ class LeagueStore extends Store {
     return list
   }
 
-  /** #21 UI: Süper Lig maçının hafta numarası (matchId → 1'den başlayan hafta).
-   *  ESPN tur.1 kaynaklarında week=null geldiğinden istemcide türetilir:
-   *  aktif sezonun maçlarında distinct ISO pazartesi-hafta anahtarları
-   *  (weeklyTop ile aynı isoMondayKey) küçükten sıralanıp 1'den numaralanır.
-   *  NOT: ertelenen/aktarılan turlar yaklaşım olarak ±1 hafta kayabilir —
-   *  kabul edilir yaklaşım. Arşiv/sezon-öncesi aylarda maç bu haritada yoktur
-   *  → bileşen çipi gizler. Türetme store getter'ında (Gea kuralı 7);
-   *  referans-anahtarlı önbellek (matchesByDay deseni: data referansı
-   *  değişmedikçe yeniden hesaplanmaz, reaktif bağımlılık korunur). */
+  /** #21 UI: Süper Lig maçının hafta numarası (matchId → 1'den başlayan tur).
+   *  ESPN tur.1 kaynaklarında week YOK (scoreboard + core API doğrulandı;
+   *  leagues[].calendar de boş) → tur KÜMELEMESİYLE türetilir:
+   *  (a) önceki maçtan >2 gün boşluk VEYA (b) takım bu turda zaten oynadı →
+   *  yeni tur. Cuma–Pazartesi turları art arda günlerde akar; milli ara ve
+   *  aynı haftadaki iki tur doğru ayrışır. <4 maçlık kümeler (ertelenen maç
+   *  telafisi) önceki tura katılır. Gerçeklikle doğrulandı (2026-10-26):
+   *  2026-27 sezonu 16 tur × tam 9 maç; GS-FB derbisi = 9. tur; son biten
+   *  tur 9 — resmi fikstür numaralandırmasıyla birebir örtüşüyor.
+   *  Arşiv/sezon-öncesi aylarda maç bu haritada yoktur → bileşen çipi gizler.
+   *  Türetme store getter'ında (Gea kuralı 7); referans-anahtarlı önbellek
+   *  (data referansı değişmedikçe yeniden hesaplanmaz, reaktivite korunur). */
   get matchWeekByMatchId(): Record<string, number> {
     const data = this.data
     if (this.matchWeekCache?.data === data) return this.matchWeekCache.out
-    const weekKeys = new Set<string>()
-    for (const m of data?.matches ?? []) {
-      weekKeys.add(isoMondayKey(m.kickoff))
+    const dayOf = (iso: string) => Math.floor(Date.parse(iso) / 86400000)
+    const clusters: Array<{ lastDay: number; teams: Set<string>; items: any[] }> = []
+    const matches = [...(data?.matches ?? [])].sort(
+      (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+    )
+    for (const m of matches) {
+      const prev = clusters[clusters.length - 1]
+      // DİKKAT: lastDay zaten gün sayısıdır — yeniden dayOf()'a SOKMA
+      // (çifte dönüşüm hatası: her maç tekil küme üretir).
+      const gapNew = !prev || dayOf(m.kickoff) - prev.lastDay > 2
+      const teamNew = !gapNew && (prev.teams.has(m.home.name) || prev.teams.has(m.away.name))
+      if (gapNew || teamNew) {
+        clusters.push({ lastDay: dayOf(m.kickoff), teams: new Set([m.home.name, m.away.name]), items: [m] })
+      } else {
+        prev.lastDay = dayOf(m.kickoff)
+        prev.teams.add(m.home.name)
+        prev.teams.add(m.away.name)
+        prev.items.push(m)
+      }
     }
-    const ordered = [...weekKeys].sort((a, b) => (a < b ? -1 : 1))
-    const rankOfKey = new Map<string, number>()
-    ordered.forEach((key, index) => rankOfKey.set(key, index + 1))
     const out: Record<string, number> = {}
-    for (const m of data?.matches ?? []) {
-      const week = rankOfKey.get(isoMondayKey(m.kickoff))
-      if (week != null) out[m.id] = week
+    let week = 0
+    for (const cluster of clusters) {
+      // Ertelenen maçın telafisi (<4 maç) önceki turun numarasını alır.
+      if (cluster.items.length < 4 && week > 0) {
+        for (const m of cluster.items) out[m.id] = week
+        continue
+      }
+      week += 1
+      for (const m of cluster.items) out[m.id] = week
     }
     this.matchWeekCache = { data, out }
     return out
