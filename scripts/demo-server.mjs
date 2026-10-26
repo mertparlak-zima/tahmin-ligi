@@ -241,7 +241,11 @@ async function seedTslDemo(supabase) {
   const matches = [
     { id: 'demo-tsl-1', ...base, external_id: 'demo-tsl-1', kickoff: kickoff(now - 72 * HOUR_MS), status: 'FINISHED', ...teams('Galatasaray', 'Samsunspor', 3, 1) },
     { id: 'demo-tsl-2', ...base, external_id: 'demo-tsl-2', kickoff: kickoff(now - 48 * HOUR_MS), status: 'FINISHED', ...teams('Konyaspor', 'Trabzonspor', 1, 1) },
-    { id: 'demo-tsl-3', ...base, external_id: 'demo-tsl-3', kickoff: kickoff(now - 30 * HOUR_MS), status: 'FINISHED', ...teams('Beşiktaş', 'Başakşehir', 2, 0) },
+    // #21 UI düzeltmesi: en yeni bitmiş tohum maçı BU GÜNE oturur (eskiden
+    // now-30h idi → Pazartesi açılan sunucuda geçen haftaya düşüyor; gerçek
+    // ESPN'in pazartesi bitmiş maçları daha yeni bir ISO haftası açınca
+    // "Haftanın Tahmincisi" bandının tohum haftası boşalıyordu).
+    { id: 'demo-tsl-3', ...base, external_id: 'demo-tsl-3', kickoff: kickoff(now - 3 * HOUR_MS), status: 'FINISHED', ...teams('Beşiktaş', 'Başakşehir', 2, 0) },
     { id: 'demo-tsl-4', ...base, external_id: 'demo-tsl-4', kickoff: kickoff(now - 2 * HOUR_MS), status: 'IN_PLAY', minute: 63, ...teams('Fenerbahçe', 'Konyaspor', 1, 0) },
     { id: 'demo-tsl-5', ...base, external_id: 'demo-tsl-5', kickoff: kickoff(now + 26 * HOUR_MS), ...teams('Başakşehir', 'Fenerbahçe', null, null) },
     { id: 'demo-tsl-6', ...base, external_id: 'demo-tsl-6', kickoff: kickoff(now + 50 * HOUR_MS), ...teams('Samsunspor', 'Beşiktaş', null, null) },
