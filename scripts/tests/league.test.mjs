@@ -562,6 +562,42 @@ suite.test('#21 TSL: standings yalnız TSL maçlarından; EU tablosu etkilenmez'
   assert.deepEqual(admin.competitions, [{ code: 'TSL', name: 'Süper Lig' }])
 })
 
+suite.test('#21 T3 review: recentPredictions lig kapsamıyla sınırlı — TSL girişi EU akışını iter mi', async () => {
+  const supF = createMemorySupabase({
+    players: [
+      { id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true },
+      { id: 'q2', name: 'Bora', color: '#5ce1e6', is_active: true },
+    ],
+    matches: [
+      row({
+        id: 'eu1', external_id: 'e1', competition: 'CL', kickoff: iso(now - 96 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Barcelona', away_short: 'Barcelona',
+        home_score: 1, away_score: 4,
+      }),
+      tslRow({
+        id: 't1', external_id: 't1', kickoff: iso(now - 48 * hour), status: 'FINISHED',
+        home_name: 'Galatasaray', home_short: 'Galatasaray',
+        away_name: 'Samsunspor', away_short: 'Samsunspor',
+        home_score: 2, away_score: 0, matchday: null,
+      }),
+    ],
+    predictions: [
+      // EU girişi ESKİ, TSL girişi YENİ — global top-30'da TSL başı çekerdi.
+      { player_id: 'q1', match_id: 'eu1', outcome: 'H',
+        created_at: iso(now - 90 * hour), updated_at: iso(now - 90 * hour) },
+      { player_id: 'q1', match_id: 't1', outcome: 'H',
+        created_at: iso(now - 2 * hour), updated_at: iso(now - 2 * hour) },
+    ],
+  })
+
+  const eu = await buildLeaguePayload(supF, { league: 'EU' })
+  assert.deepEqual(eu.recentPredictions.map(r => r.matchId), ['eu1'], 'EU akışı yalnız EU maçı olayı taşır')
+
+  const tsl = await buildLeaguePayload(supF, { league: 'TSL' })
+  assert.deepEqual(tsl.recentPredictions.map(r => r.matchId), ['t1'], 'TSL akışı yalnız TSL maçı olayı taşır')
+})
+
 suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalır', async () => {
   const p = await buildLeaguePayload(mainSupabase(), { seasonYear: SY + 4 })
   assert.equal(p.matches.length, 0)

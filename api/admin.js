@@ -3,7 +3,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { getSupabase, isReadonly } from '../lib/supabase.js'
-import { syncNow } from '../lib/sync.js'
+import { syncNow, writeSyncSummary } from '../lib/sync.js'
 import { buildAdminPayload, DEFAULT_SCORING, initialsOf } from '../lib/league.js'
 import { isLocked } from '../lib/status.js'
 import { LEAGUE_BY_CODE, ACTIVE_LEAGUE_CODES, activeLeague } from '../lib/targets.js'
@@ -359,6 +359,7 @@ export async function sync(supabase) {
       ACTIVE_LEAGUE_CODES.map(code => syncNow(supabase, { league: code })),
     )
     const leagues = {}
+    const errors = []
     let matchesSeen = 0
     let changed = 0
     let complete = true
@@ -369,14 +370,19 @@ export async function sync(supabase) {
       if (result.status === 'rejected') {
         complete = false
         failure = result.reason?.message
+        errors.push(`${code}: ${failure}`)
         leagues[code] = { ok: false, error: failure }
       } else {
         matchesSeen += result.value.matchesSeen
         changed += result.value.changed
         complete = complete && result.value.complete
+        if (!result.value.complete) errors.push(`${code}: ${result.value.errors.join(' | ')}`)
         leagues[code] = { ok: true, ...result.value }
       }
     }
+    // Küresel sync_state özeti (#21 T3 review): per-lig son yazan kazanır
+    // yarışını düzelt — maybeSync ile aynı birleşik özet kalıcı yazılır.
+    await writeSyncSummary(supabase, matchesSeen, errors)
     // Tüm ligler hata verdiyse tek lig dönemindeki gibi 502 döner.
     if (matchesSeen === 0 && failure) throw new Error(failure)
     return json(200, { ok: true, matchesSeen, changed, complete, leagues })

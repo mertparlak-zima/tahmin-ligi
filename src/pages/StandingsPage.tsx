@@ -16,7 +16,9 @@ function capMonth(key: string): string {
 
 // #21 Faz 3: Haftanın tahmincisi bandı — veri league-store weeklyTop
 // getter'ından (türetme store'da, Gea kuralı 7); render koşulu parent
-// JSX'inde doğrudan store okumasıyla çevrilir (kural 11).
+// JSX'inde doğrudan store okumasıyla çevrilir (kural 11). Yalnız AKTİF
+// sezon görünümünde gösterilir (arşiv sezonunda güncel hafta yanıltıcı —
+// weeklyTop aktif sezon verisinden türetilir; #21 T3 review).
 class WeeklyTopBanner extends Component {
   template() {
     const top = leagueStore.weeklyTop
@@ -37,6 +39,14 @@ class WeeklyTopBanner extends Component {
 // (zincirli ternary + prop'lu child sessiz boş render verdi); her koşul
 // doğrudan store okumasıyla, tablo kendi içinde store getter'ından map'ler.
 class ChampionshipView extends Component {
+  created() {
+    // #21 T3 review: görünüm açıkken lig değişirse (TopBar switcher) diğer
+    // lig YENİDEN sağlanmalı — otherLeagueCode değişir, cache'te yoktur;
+    // çağrı idempotent (cache doluysa no-op), observe'dan sızıntı zararsız.
+    leagueStore.ensureOtherLeague()
+    leagueStore.observe('league', () => leagueStore.ensureOtherLeague())
+  }
+
   template() {
     return (
       <div class="championship-view">
@@ -141,7 +151,7 @@ export default class StandingsPage extends Component {
 
         {this.standingsView === 'league' ? (
           <div>
-            {leagueStore.weeklyTop !== null ? <WeeklyTopBanner /> : null}
+            {leagueStore.weeklyTop !== null && leagueStore.selectedSeason === 0 ? <WeeklyTopBanner /> : null}
 
             <div class="page-meta">
               <span class="meta-main">{counts?.players ?? 0} oyuncu · {counts?.finished ?? 0} biten maç</span>

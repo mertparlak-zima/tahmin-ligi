@@ -71,7 +71,11 @@ npm install
 
 **Migration deploy sırası (#21):** çoklu lig kodu CANLIYA çıkmadan ÖNCE SQL
 Editor'da `supabase/migrations/2026-11-super-lig.sql` çalıştırılmalıdır
-(`matches` tablosuna `league` kolonu + eski check constraint'in kaldırılması).
+(`matches.competition` check constraint'inin `'TSL'` içerecek biçimde
+yeniden kurulması + eski `bonus:<yıl>` anahtarlarının `bonus:EU:<yıl>`
+kopyası). `league`/`season_year` kolonları zaten #18'in
+`2026-10-season-league.sql` migration'ındadır — #18'i atlamış bir veritabanında
+önce o, sonra `2026-11` çalıştırılır.
 Kod önce deploy edilirse TSL senkron upsert'leri eski constraint'e takılır;
 SQL önce işlenirse mevcut Avrupa verisi etkilenmez (varsayılan lig `EU`).
 

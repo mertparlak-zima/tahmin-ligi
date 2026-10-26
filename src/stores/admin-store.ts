@@ -107,17 +107,27 @@ class AdminStore extends Store {
     sessionStorage.removeItem(ADMIN_KEY)
   }
 
+  /** Bootstrap sıra bekçisi (#21 T3 review): switchLeague uçuştaki eski
+   *  bootstrap'ın YANITINI düşürür — bayat çözüm data/resetDrafts'ı YAZMAZ
+   *  (aksi halde eski ligin maçları yeni ligin adı altında editörde
+   *  açılır ve taslaklar yanlış payload'tan ekilir). */
+  private bootSeq = 0
+
   async bootstrap() {
+    const seq = ++this.bootSeq
     this.loading = true
     try {
-      this.data = await api(`/api/admin/bootstrap?league=${encodeURIComponent(this.league)}`)
+      const data = await api(`/api/admin/bootstrap?league=${encodeURIComponent(this.league)}`)
+      if (seq !== this.bootSeq) return // bayat yanıt — yenisini ezme
+      this.data = data
       this.error = null
       this.resetDrafts()
     } catch (err: any) {
+      if (seq !== this.bootSeq) return
       this.error = err.message
       if (/Yetkisiz|401/.test(err.message)) this.logout()
     } finally {
-      this.loading = false
+      if (seq === this.bootSeq) this.loading = false
     }
   }
 

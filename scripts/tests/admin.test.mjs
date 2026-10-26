@@ -577,6 +577,9 @@ suite.test('sync #21: tüm aktif ligler senkronlanır, özet toplam döner', asy
     assert.equal(sup.store.matches.filter(m => m.league === 'TSL').length, 1, 'TSL satırı')
     assert.equal(sup.store.matches.find(m => m.league === 'TSL').competition, 'TSL')
     assert.equal(sup.store.matches.find(m => m.league === 'TSL').status, 'FINISHED')
+    // #21 T3 review: küresel sync_state özeti mutlu yolda toplamı taşır.
+    assert.equal(sup.store.sync_state[0].matches_seen, 2, 'sync_state: EU 1 + TSL 1 toplam')
+    assert.equal(sup.store.sync_state[0].last_error, null, 'sync_state: hata yok')
   } finally {
     stub.restore()
   }
@@ -616,6 +619,11 @@ suite.test('sync: tüm ligler hatalıysa 502; tek lig hatalıysa 200 + kısmi ö
     assert.equal(body.matchesSeen, 1)
     assert.equal(body.complete, false, 'TSL boş → complete=false')
     assert.ok(body.leagues.TSL.error.includes('Senkronizasyon kayıt döndürmedi'), 'TSL hatası lig bazlı notta')
+    // #21 T3 review: küresel sync_state özeti — per-lig "son yazan kazanır"
+    // yarışı yerine birleşik not kalıcı yazılır (TSL notu EU null'ıyla ezilmez).
+    const state = supPartial.store.sync_state[0]
+    assert.equal(state.matches_seen, 1, 'özet: yalnız EU maç sayısı')
+    assert.ok(String(state.last_error).includes('TSL'), 'özet: TSL hatası last_error\'da')
   } finally {
     stubPartial.restore()
   }
