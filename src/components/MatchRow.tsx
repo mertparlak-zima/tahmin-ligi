@@ -15,6 +15,9 @@ export default function MatchRow({ match, onToggle }: { match: any; onToggle: ()
   const dimAway = match.isFinished && homeScore !== null && awayScore !== null && homeScore > awayScore
   const stale = match.isLive && leagueStore.staleActive
   const isOpen = uiStore.openMatchId === match.id
+  // #21 UI: Süper Lig'de maçın haftası ("12. Hafta") — türetim store
+  // getter'ında (Gea kuralı 7); arşiv aylarında haritada olmadığından 0 döner.
+  const weekNo = leagueStore.matchWeekByMatchId[match.id] ?? 0
 
   const slot =
     match.statusGroup === 'inactive'
@@ -41,18 +44,25 @@ export default function MatchRow({ match, onToggle }: { match: any; onToggle: ()
       </div>
       <div class="match-teams">
         <div class={cn('team-line', dimHome && 'dim')}>
-          <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={22} />
+          <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={30} />
           <span class="team-name">{match.home.short}</span>
           <span class="team-score">{homeScore ?? '–'}</span>
         </div>
         <div class={cn('team-line', dimAway && 'dim')}>
-          <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={22} />
+          <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={30} />
           <span class="team-name">{match.away.short}</span>
           <span class="team-score">{awayScore ?? '–'}</span>
         </div>
       </div>
       <div class="match-meta">
-        <CompBadge code={match.competitionCode} size="sm" />
+        {/* #21 UI: TSL tek turnuva → rozet yerine hafta çipi; EU rozet
+            semantiği korunur. Koşul template() içinde doğrudan store
+            okumasıyla (Gea kural 11/12). */}
+        {leagueStore.league === 'TSL' && weekNo > 0 ? (
+          <span class="week-chip">{weekNo}. Hafta</span>
+        ) : (
+          <CompBadge code={match.competitionCode} size="sm" />
+        )}
         {match.predictionCount > 0 ? (
           <span class="pred-count">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

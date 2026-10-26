@@ -149,17 +149,24 @@ body::after {
 
 body::before {
   background-image: url('/logos/eu.svg');
+  /* #21 UI: resmi UCL starball kare-yakın — genişlik yükseklikle dengeli
+     sınırlanır (tam ekran contain ekrani doldurup baskın oluyordu). */
+  background-size: min(78vh, 92vw, 640px) auto;
 }
 
 body::after {
   background-image: url('/logos/tsl.svg');
+  /* #21 UI: resmi Süper Lig wordmark'ı çok geniş (1210×478) — genişlik
+     üst sınırı ekran bütçesine bağlanır, oran 'auto' ile korunur. */
+  background-size: min(92vw, 1100px) auto;
 }
 
 body.league-eu::before {
-  opacity: 0.05;
+  opacity: 0.07;
 }
 
 body.league-tsl::after {
+  /* TSL wordmark koyu-yoğun → EU starball'ından bir tık daha soluk. */
   opacity: 0.06;
 }
 
@@ -200,12 +207,21 @@ body.league-eu .brand-mark {
 }
 
 /* Süper Lig teması: kırmızı aksan (canlı göstergesi --live ile ton
-   ayrımı korur) + hafif kızıl zemin tonu. */
+   ayrımı korur) + hafif kızıl zemin tonu.
+   #21 UI geri bildirimi: kırmızı zeminde koyu mürekkep okunmuyordu —
+   --ink beyaza yakın, --accent bir tık koyulaştırıldı (bold metinde
+   ~4.4:1); --ink kullanan yüzeylerin metni hep bold. */
 body.league-tsl {
-  --accent: #ff4a5e;
+  --accent: #e8273f;
   --accent-hi: #ff7080;
-  --ink: #2a060c;
+  --ink: #fff6f7;
   --bg: #1c0b10;
+}
+
+/* Beyaz mürekkeple hover'daki açık kırmızı (--accent-hi) okunmaz → TSL'de
+   birincil düğme hover'u koyu kırmızıya iner. */
+body.league-tsl .btn.primary:hover:not(:disabled) {
+  background: #c21c33;
 }
 
 body.league-tsl .brand-mark {
@@ -676,21 +692,24 @@ body.league-tsl .brand-mark {
 }
 
 .cal-head {
-  display: flex;
+  /* #21 UI: 3 kolonlu grid (1fr auto 1fr) — ok butonları başlığı gerçekten
+     ortadan çeper (eski flex'te sağdaki "Bugün" düğmesi başlığı kaydırıyordu). */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 2px 2px 10px;
 }
 
+/* #21 UI: dokunma hedefi ≥44px, yuvarla korundu. */
 .cal-nav {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: var(--surface-2);
   border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1;
   display: grid;
@@ -713,13 +732,14 @@ body.league-tsl .brand-mark {
 }
 
 .cal-title {
-  font-size: 16px;
-  font-weight: 850;
+  /* #21 UI: başlık belirgin büyütüldü (küçük geliyordu). */
+  font-size: 20px;
+  font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .cal-sub {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--muted);
   white-space: nowrap;
@@ -729,6 +749,7 @@ body.league-tsl .brand-mark {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  justify-self: end;
 }
 
 .cal-today-btn {
@@ -1000,6 +1021,9 @@ body.league-tsl .brand-mark {
   gap: 10px;
   flex-wrap: wrap;
   margin: 2px 0 14px;
+  /* #21 UI: takvim günü seçilince buraya scrollIanır — sticky topbar
+     (~100px) hedefi örtmesin diye üstten pay bırakır. */
+  scroll-margin-top: 104px;
 }
 
 .segmented {
@@ -1087,9 +1111,10 @@ body.league-tsl .brand-mark {
   gap: 8px;
 }
 
+/* #21 UI: maç kartları küçük geliyordu — kolon ve puntolar büyütüldü. */
 .match-row {
   display: grid;
-  grid-template-columns: 68px 1fr auto 20px;
+  grid-template-columns: 76px 1fr auto 20px;
   align-items: center;
   gap: 16px;
   width: 100%;
@@ -1117,7 +1142,7 @@ body.league-tsl .brand-mark {
 }
 
 .slot-main {
-  font-size: 17px;
+  font-size: 18.5px;
   font-weight: 850;
   letter-spacing: -0.01em;
 }
@@ -1157,7 +1182,7 @@ body.league-tsl .brand-mark {
 .team-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1167,7 +1192,7 @@ body.league-tsl .brand-mark {
 }
 
 .team-name {
-  font-size: 15.5px;
+  font-size: 17.5px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -1176,7 +1201,7 @@ body.league-tsl .brand-mark {
 
 .team-score {
   margin-left: auto;
-  font-size: 16.5px;
+  font-size: 19px;
   font-weight: 850;
 }
 
@@ -1191,7 +1216,7 @@ body.league-tsl .brand-mark {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 750;
   color: var(--muted);
 }
@@ -1359,8 +1384,25 @@ body.league-tsl .brand-mark {
 }
 
 .comp-badge-sm {
-  padding: 2.5px 7px;
-  font-size: 9.5px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+}
+
+/* #21 UI: Süper Lig maç satırında "N. Hafta" çipi — yalnız TSL görünümünde
+   render edilir (EU turnuva rozeti semantiği korunur). TSL rozet rengi
+   altınla aynı ton ailesinde. */
+.week-chip {
+  display: inline-grid;
+  place-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--gold);
+  background: rgba(255, 208, 92, 0.12);
+  border: 1px solid rgba(255, 208, 92, 0.35);
 }
 
 /* ---------- Form çipleri ---------- */
@@ -2022,7 +2064,7 @@ body.league-tsl .brand-mark {
 
 .standings-table th {
   padding: 12px 10px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 850;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -2038,7 +2080,7 @@ body.league-tsl .brand-mark {
 
 .standings-table td {
   padding: 12px 10px;
-  font-size: 15px;
+  font-size: 16px;
   text-align: center;
   border-bottom: 1px solid var(--line);
 }
@@ -2056,7 +2098,7 @@ body.league-tsl .brand-mark {
   align-items: center;
   gap: 10px;
   font-weight: 750;
-  font-size: 16.5px;
+  font-size: 17.5px;
 }
 
 .col-rank.top {
@@ -3117,7 +3159,7 @@ body.league-tsl .brand-mark {
   }
 
   .match-row {
-    grid-template-columns: 48px 1fr auto 14px;
+    grid-template-columns: 58px 1fr auto 16px;
     gap: 9px;
     padding: 10px 12px;
   }

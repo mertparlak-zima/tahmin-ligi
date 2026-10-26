@@ -61,6 +61,18 @@ const calChips = await page.locator('.cal-chip').count()
 check('fikstür chipleri render', calChips > 0, `${calChips} chip`)
 await noOverflow('maçlar')
 
+// --- 1b2) #21 UI: takvim başlık/ok boyutları (kullanıcı geri bildirimi) ---
+const calTitlePx = await page.evaluate(() =>
+  parseFloat(getComputedStyle(document.querySelector('.cal-title')).fontSize)
+)
+check('takvim başlığı ≥20px', calTitlePx >= 20, `${calTitlePx}px`)
+const calNavBox = await page.locator('.cal-nav[aria-label="Önceki ay"]').boundingBox()
+check(
+  'takvim ok butonu ≥40px',
+  calNavBox != null && calNavBox.width >= 40 && calNavBox.height >= 40,
+  calNavBox ? `${Math.round(calNavBox.width)}x${Math.round(calNavBox.height)}` : 'kutu yok'
+)
+
 // --- 1c) Önbellek hidrasyonu + ETag (#16) ---
 // API bloklanınca sayfa sessionStorage önbelleğinden anında render etmeli
 // (stale-while-revalidate); API açılınca manuel yenileme tazeler.
@@ -99,6 +111,11 @@ await page.waitForTimeout(500)
 
 const matchRows = await page.locator('.match-row').count()
 check('maç kartları render', matchRows > 0, `${matchRows} kart`)
+
+// #21 UI: maçlı gün seçilince liste yumuşak kaydırmayla görünür olur.
+await page.waitForTimeout(800)
+const scrollAfterDayClick = await page.evaluate(() => window.scrollY)
+check('gün seçimi maç listesine kaydırır', scrollAfterDayClick > 40, `${Math.round(scrollAfterDayClick)}px`)
 
 if (process.env.BROWSER_CHECK_TEST_STALE) {
   // Fake-stale modunda canlıya zorlanan maçın günü seç (canlı noktalı hücre).
@@ -295,9 +312,17 @@ if ((await tslSegment.count()) > 0) {
   check('TSL satırlarında isabet değeri', accCells > 0, `${accCells} hücre`)
 
   // #21 Faz 3: Haftanın tahmincisi bandı — TSL demo tohumu bitmiş maçlara
-  // doğru tahminler eker; son ISO haftasında garanti görünür.
+  // doğru tahminler eker; son ISO haftasında garanti görünür. (Bant yoksa
+  // textContent beklemesi 30sn timeout ile turu DÜŞÜRMESİN — sayım tabanlı.)
   const weeklyChip = page.locator('.weekly-top')
-  check('haftanın tahmincisi bandı', (await weeklyChip.count()) === 1, String((await weeklyChip.textContent()) ?? '').trim().slice(0, 56))
+  const weeklyCount = await weeklyChip.count()
+  check(
+    'haftanın tahmincisi bandı',
+    weeklyCount === 1,
+    weeklyCount === 1
+      ? String((await weeklyChip.textContent()) ?? '').trim().slice(0, 56)
+      : 'bant yok — demo tohumunun doğru-tahminli bitmiş maçı en yeni bitmiş ISO haftasından eski (sunucu Pazartesi açılmış olabilir)'
+  )
 
   // #21 Faz 3: İsabet Şampiyonası segmenti + birleşik tablo (EU % / TSL % / Genel %).
   const champSeg = page.locator('.standings-view-switch .seg-item', { hasText: 'İsabet Şampiyonası' })
@@ -314,13 +339,26 @@ if ((await tslSegment.count()) > 0) {
   check('lig görünümüne dönüş', (await page.locator('.standings-table').count()) === 1)
   const tslLogo = await page.evaluate(() => {
     const cs = getComputedStyle(document.body, '::after')
-    return { img: cs.backgroundImage, opacity: cs.opacity }
+    return { img: cs.backgroundImage, opacity: cs.opacity, size: cs.backgroundSize }
   })
   check('TSL soluk zemin logosu', tslLogo.img.includes('/logos/tsl.svg') && Number(tslLogo.opacity) > 0, JSON.stringify(tslLogo).slice(0, 80))
+  // #21 UI: geniş wordmark — genişlik üst sınırlı (min(92vw,1100px)); hem
+  // görünürlük (>%40 vw) hem taşmama (<2000px) aralığında ve soluk (≤0.10).
+  const tslLogoW = parseFloat(String(tslLogo.size))
+  check(
+    'TSL zemin logo boyutu/opaklık makul',
+    tslLogoW > 200 && tslLogoW < 2000 && Number(tslLogo.opacity) <= 0.1,
+    `${tslLogo.size} · ${tslLogo.opacity}`
+  )
   // TSL tek turnuva → kupalar seçici gizli olmalı.
   await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
   await page.waitForTimeout(700)
   check('TSL kupalar seçici gizli', (await page.locator('.filter-bar .comp-select').count()) === 0)
+
+  // #21 UI: Süper Lig maç kartında "N. Hafta" çipi (ESPN week=null →
+  // istemci türevi; rozet yerine geçer).
+  const weekChips = await page.locator('.match-row .week-chip').count()
+  check('TSL maç kartında hafta çipi', weekChips > 0, `${weekChips} çip`)
 
   // #21 Faz 3: TSL form çipleri — 4 büyük dışı takımlı maçın akordiyonunda
   // takım form çipleri (payload home.form/away.form; buildTeamForms tüm
@@ -351,9 +389,15 @@ if ((await tslSegment.count()) > 0) {
   check('Avrupa dönüşünde FB sütunu', (await page.locator('.standings-table th', { hasText: 'FB' }).count()) === 1)
   const euLogo = await page.evaluate(() => {
     const cs = getComputedStyle(document.body, '::before')
-    return { img: cs.backgroundImage, opacity: cs.opacity }
+    return { img: cs.backgroundImage, opacity: cs.opacity, size: cs.backgroundSize }
   })
   check('Avrupa soluk zemin logosu', euLogo.img.includes('/logos/eu.svg') && Number(euLogo.opacity) > 0, JSON.stringify(euLogo).slice(0, 80))
+  const euLogoW = parseFloat(String(euLogo.size))
+  check(
+    'EU zemin logo boyutu/opaklık makul',
+    euLogoW > 200 && euLogoW < 2000 && Number(euLogo.opacity) <= 0.1,
+    `${euLogo.size} · ${euLogo.opacity}`
+  )
 } else {
   check('lig değiştirici görünür', false, 'Süper Lig segmenti yok (meta.leagues gelmedi mi?)')
 }
