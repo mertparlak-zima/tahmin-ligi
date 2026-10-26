@@ -47,11 +47,17 @@ function parseAvatarDataUrl(raw) {
 }
 
 /** Magic-byte koklama: içeriğin GERÇEK türünü döndürür (beyan değil).
- * JPEG FF D8 FF · PNG 89 50 4E 47 · WebP 52 49 46 46 (RIFF). */
+ * JPEG FF D8 FF · PNG 89 50 4E 47 · WebP: RIFF + 8. bayttan itibaren
+ * 'WEBP' etiketi (#24 T3 review: yalnız RIFF kontrolü WAV/AVI'yi de
+ * geçiyordu). */
 function sniffImageType(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
   if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png'
-  if (bytes.length >= 4 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'image/webp'
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return 'image/webp'
   return null
 }
 
@@ -79,11 +85,13 @@ async function removeStorageQuietly(supabase, path) {
 // --- Uçlar (demo sunucusu da yeniden kullanır; export'lar test amaçlı) ---
 
 export async function uploadAvatar(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const { playerId } = body
+  const body = await request.json().catch(() => null)
+  const { playerId } = body ?? {}
 
-  // a) playerId + dataUrl biçimi
-  if (!playerId || typeof body.dataUrl !== 'string' || !body.dataUrl.startsWith('data:image/')) {
+  // a) playerId + dataUrl biçimi (+ id bekçisi — ham PostgREST hatası
+  // sızmasın, #24 T3 review; güvenli aralık, bkv. api/players.js idOk)
+  const ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+  if (!playerId || !ID_RE.test(String(playerId)) || typeof body.dataUrl !== 'string' || !body.dataUrl.startsWith('data:image/')) {
     return json(400, { error: 'playerId ve dataUrl (data:image/...;base64,...) gerekli.' })
   }
   const parsed = parseAvatarDataUrl(body.dataUrl)
@@ -119,7 +127,10 @@ export async function uploadAvatar(supabase, request) {
   const { error: uploadError } = await supabase.storage
     .from(AVATAR_BUCKET)
     .upload(path, parsed.bytes, { contentType: sniffed, upsert: false })
-  if (uploadError) return json(500, { error: `Avatar yüklenemedi: ${uploadError.message}` })
+  if (uploadError) {
+    console.error('uploadAvatar:', uploadError.message)
+    return json(500, { error: 'Avatar yüklenemedi.' })
+  }
 
   const avatarUrl = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl
 
@@ -132,7 +143,10 @@ export async function uploadAvatar(supabase, request) {
     .maybeSingle()
   if (updateError || !updated) {
     await removeStorageQuietly(supabase, path)
-    if (updateError) return json(500, { error: `Avatar kaydedilemedi: ${updateError.message}` })
+    if (updateError) {
+      console.error('uploadAvatar update:', updateError.message)
+      return json(500, { error: 'Avatar kaydedilemedi.' })
+    }
     return json(404, { error: 'Oyuncu bulunamadı.' })
   }
 
@@ -166,7 +180,10 @@ export async function deleteAvatar(supabase, request) {
     .eq('id', playerId)
     .select('id, name, color, is_active, avatar_url')
     .maybeSingle()
-  if (error) return json(500, { error: `Avatar silinemedi: ${error.message}` })
+  if (error) {
+    console.error('deleteAvatar:', error.message)
+    return json(500, { error: 'Avatar silinemedi.' })
+  }
   if (!updated) return json(404, { error: 'Oyuncu bulunamadı.' })
   return json(200, { ok: true, player: { ...updated, initials: initialsOf(updated.name) } })
 }
@@ -187,7 +204,7 @@ async function handle(fn, request, method) {
     return await fn(supabase, request)
   } catch (err) {
     console.error(`${method} /api/players/avatar error:`, err.message)
-    return json(500, { error: 'İşlem başarısız.', detail: err.message })
+    return json(500, { error: 'İşlem başarısız.' })
   }
 }
 

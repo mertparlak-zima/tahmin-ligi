@@ -42,7 +42,8 @@ class PredictionsStore extends Store {
    *  ui-store toasts deseni (kanıtlanmış yeniden render yolu). */
   private dirty: Record<string, true> = {}
   /** Kaydet sürerken o maçın düğmesi kilitli. */
-  savingMatchId: string | null = null
+  /** Maç başına kayıt sürüyor mu (#24 T3 review: paralel maç kayıtları). */
+  saving: Record<string, boolean> = {}
   error: string | null = null
 
   /** Akordiyon içi "+ Oyuncu" satır formu (.open CSS deseni). */
@@ -107,7 +108,9 @@ class PredictionsStore extends Store {
       byPlayer.get(playerId).push({ matchId, outcome: this.drafts[key] ?? '' })
     }
     if (byPlayer.size === 0) return
-    this.savingMatchId = matchId
+    // Maç başına kayıt durumu (#24 T3 review): tek yuva iki maçın paralel
+    // kaydında birbirinin düğmesini erken açıyordu — anahtar maçId olur.
+    this.saving = { ...this.saving, [matchId]: true }
     try {
       await Promise.all(
         [...byPlayer.entries()].map(entry =>
@@ -123,7 +126,9 @@ class PredictionsStore extends Store {
     } catch (err: any) {
       uiStore.toast(`Tahminler kaydedilemedi: ${err?.message ?? 'bilinmeyen hata'}`)
     } finally {
-      this.savingMatchId = null
+      const next = { ...this.saving }
+      delete next[matchId]
+      this.saving = next
     }
   }
 

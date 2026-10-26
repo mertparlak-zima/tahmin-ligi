@@ -111,7 +111,7 @@ class ColorChip extends Component {
 class EntryForm extends Component {
   template({ match }: any) {
     const dirtyCount = predictionsStore.dirtyCount(match.id)
-    const saving = predictionsStore.savingMatchId === match.id
+    const saving = predictionsStore.saving[match.id] === true
     return (
       <div class="entry-form">
         <div class="entry-list">

@@ -153,10 +153,12 @@ suite.test('oyuncu silme: tahmini yoksa siler; id yoksa 400', async () => {
 // --- avatar uçları (#17 → #24 public) ---
 
 // Magic-byte önekli minimal test görselleri (gerçek decode gerekmez).
+// RIFF_BYTES: WebP = RIFF magic + 8. bayttan 'WEBP' etiketi (#24 T3 review
+// ile sniff bunu da doğruluyor).
 const b64 = bytes => Buffer.from(bytes).toString('base64')
 const JPEG_BYTES = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]
 const PNG_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]
-const RIFF_BYTES = [0x52, 0x49, 0x46, 0x46, 0x24, 0x00]
+const RIFF_BYTES = [0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]
 const dataUrl = (mime, bytes) => `data:${mime};base64,${b64(bytes)}`
 const avatarUrl = 'http://localhost:8787/api/players/avatar'
 
@@ -207,10 +209,30 @@ suite.test('avatar yükleme: magic-byte beyanla uyuşmaz ama whitelist türü �
   assert.equal(res.status, 200)
   const body = await res.json()
   assert.ok(body.avatarUrl.endsWith('.jpg'))
-  // beyan JPEG, içerik WebP (RIFF) → kabul + .webp
+  // beyan JPEG, içerik WebP (RIFF+WEBP) → kabul + .webp
   const res2 = await call(sup, avatarPOST, 'POST', { playerId: 'p2', dataUrl: dataUrl('image/jpeg', RIFF_BYTES) }, avatarUrl)
   assert.equal(res2.status, 200)
   assert.ok((await res2.json()).avatarUrl.endsWith('.webp'))
+})
+
+suite.test('avatar yükleme (#24 review): WEBP etiketi olmayan RIFF (WAV/AVI) reddedilir', async () => {
+  const sup = createMemorySupabase({ players: basePlayers() })
+  // RIFF magic'i taşıyan ama 8. baytta WEBP etiketi OLMAYAN gövde (WAV benzeri)
+  const fakeRiff = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45])
+  const res = await call(sup, avatarPOST, 'POST', { playerId: 'p1', dataUrl: dataUrl('image/webp', fakeRiff) }, avatarUrl)
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).error, 'Dosya içeriği geçerli bir görsel değil (JPEG, PNG, WebP).')
+})
+
+suite.test('players (#24 review): uuid olmayan id → 400 (PostgREST 22P02 sızması yok)', async () => {
+  const sup = createMemorySupabase({ players: basePlayers() })
+  const bad = "'; drop table players; --"
+  const patch = await call(sup, PATCH, 'PATCH', { id: bad, color: '#ffffff' })
+  assert.equal(patch.status, 400)
+  const del = await call(sup, DELETE, 'DELETE', { id: bad })
+  assert.equal(del.status, 400)
+  const av = await call(sup, avatarPOST, 'POST', { playerId: bad, dataUrl: dataUrl('image/jpeg', JPEG_BYTES) }, avatarUrl)
+  assert.equal(av.status, 400)
 })
 
 suite.test('avatar yükleme: geçersiz MIME beyanı 400', async () => {

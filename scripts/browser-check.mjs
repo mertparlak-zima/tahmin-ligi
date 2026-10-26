@@ -1,8 +1,11 @@
 // Gerçek tarayıcıda (headless Chromium) UI uçtan uca kontrolü.
 // Kullanım: node scripts/browser-check.mjs
-// Önkoşul: npm run build && npm run dev:api (bellek-içi demo sunucu,
-// http://localhost:8787). #24 Faz 2 ile admin girişi kaldırıldı —
-// ADMIN_PASSWORD gerekmez; tahmin/oyuncu akışları herkese açık uçları kullanır.
+// Önkoşul: npm run build && (bilek-içi demo sunucu; tohumlar için
+// DEMO_TSL_SEED=1 ile başlat — "Haftanın Tahmincisi" gibi zamana bağlı
+// kontroller garantili tohum verisi ister):
+//   $env:DEMO_TSL_SEED='1'; node scripts/demo-server.mjs
+// #24 Faz 2 ile admin girişi kaldırıldı — ADMIN_PASSWORD gerekmez;
+// tahmin/oyuncu akışları herkese açık uçları kullanır.
 
 import { chromium } from 'playwright'
 

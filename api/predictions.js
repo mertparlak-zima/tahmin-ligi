@@ -25,20 +25,27 @@ const json = (status, body) =>
  * Doğrulama → oyuncu/maç kontrolü → kilit kontrolü (yazma ÖNCESİ, atomik)
  * → upsert + delete. */
 export async function savePredictions(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const playerId = body.playerId
-  const items = Array.isArray(body.items) ? body.items : null
+  const body = await request.json().catch(() => null)
+  const playerId = body?.playerId
+  const items = Array.isArray(body?.items) ? body.items : null
 
   if (!playerId || !items || items.length === 0 || items.length > 100) {
     return json(400, { error: 'playerId ve 1-100 arası items gerekli.' })
   }
+  // id biçim bekçisi (#24 T3 review): uuid OLMAYAN id PostgREST'te ham hata
+  // sızdırıyordu; katı uuid demo kimliklerini ('p1') kırardığından güvenli
+  // karakter aralığı yeterli (bkv. api/players.js idOk).
+  const ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+  if (!ID_RE.test(String(playerId))) return json(400, { error: 'playerId geçersiz biçimde.' })
 
-  const matchIds = items.map(i => i.matchId)
+  const matchIds = items.map(i => i?.matchId)
+  if (matchIds.some(id => !id || !ID_RE.test(String(id)))) {
+    return json(400, { error: 'Her tahmin için geçerli biçimde matchId gerekli.' })
+  }
   if (new Set(matchIds).size !== matchIds.length) {
     return json(400, { error: 'Aynı maç birden fazla kez gönderildi.' })
   }
   for (const item of items) {
-    if (!item.matchId) return json(400, { error: 'Her tahmin için matchId gerekli.' })
     if (item.outcome !== '' && !['H', 'D', 'A'].includes(item.outcome)) {
       return json(400, { error: 'Tahmin H, D, A veya boş (silme) olmalı.' })
     }
@@ -63,6 +70,10 @@ export async function savePredictions(supabase, request) {
     }
   }
 
+  // NOT (#24 T3 review): kilit denetimi tüm yazmalardan ÖNCE gelir (kilitli
+  // maçla karışık batch asla yazılmaz). Yazım aşaması ise iki ayrı ifadedir
+  // (upsert + delete): silme başarısız olursa batch yarı kalabilir — 500
+  // döner, istemci dirty anahtarları korur ve yeniden deneme idempotent'tir.
   const upserts = items
     .filter(i => i.outcome !== '')
     .map(i => ({ player_id: playerId, match_id: i.matchId, outcome: i.outcome, updated_at: new Date().toISOString() }))
@@ -72,7 +83,10 @@ export async function savePredictions(supabase, request) {
     const { error } = await supabase
       .from('predictions')
       .upsert(upserts, { onConflict: 'player_id,match_id' })
-    if (error) return json(500, { error: `Tahminler kaydedilemedi: ${error.message}` })
+    if (error) {
+      console.error('savePredictions upsert:', error.message)
+      return json(500, { error: 'Tahminler kaydedilemedi.' })
+    }
   }
   if (deletes.length > 0) {
     const { error } = await supabase
@@ -80,7 +94,10 @@ export async function savePredictions(supabase, request) {
       .delete()
       .eq('player_id', playerId)
       .in('match_id', deletes)
-    if (error) return json(500, { error: `Tahminler silinemedi: ${error.message}` })
+    if (error) {
+      console.error('savePredictions delete:', error.message)
+      return json(500, { error: 'Tahminler silinemedi.' })
+    }
   }
 
   return json(200, { ok: true, saved: upserts.length, deleted: deletes.length, player: player.name })
@@ -99,6 +116,6 @@ export async function PUT(request) {
     return await savePredictions(supabase, request)
   } catch (err) {
     console.error('PUT /api/predictions error:', err.message)
-    return json(500, { error: 'İşlem başarısız.', detail: err.message })
+    return json(500, { error: 'İşlem başarısız.' })
   }
 }

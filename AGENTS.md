@@ -50,8 +50,10 @@ npm run dev:api               # in-memory demo API (DB gerektirmez, 8787)
 npm run dev:db                # GERÇEK Supabase'li tam yığın (8787, .env gerekli)
 npm run demo                  # build + in-memory demo sunucu
 npm run check:db              # Supabase bağlantı/şema/senkron doğrulaması
-node --env-file=.env scripts/e2e-local.mjs        # API uçtan uca (12 test)
-node --env-file=.env scripts/browser-check.mjs    # headless tarayıcı UI turu
+node --env-file=.env scripts/e2e-local.mjs        # API uçtan uca (public akış)
+node scripts/browser-check.mjs                    # headless tarayıcı UI turu
+                                                  # (yalnız localhost; sunucu tohumlu
+                                                  # açılırsa DEMO_TSL_SEED=1)
 node scripts/smoke-espn.mjs                       # gerçek ESPN çekimi
 node scripts/smoke-league.mjs                     # payload/puanlama (mock)
 node scripts/smoke-sync.mjs                       # senkron mantığı (mock)

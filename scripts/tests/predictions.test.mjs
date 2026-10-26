@@ -179,6 +179,30 @@ suite.test('bozuk JSON gövdesi 400', async () => {
   assert.equal(sup.store.predictions.length, 0)
 })
 
+suite.test('#24 review: null gövde ve null item 400 (500 değil)', async () => {
+  const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
+  // body: null (JSON null)
+  const nullBody = new Request('http://localhost:8787/api/predictions', {
+    method: 'PUT',
+    body: 'null',
+    headers: { 'content-type': 'application/json' },
+  })
+  nullBody.supabase = sup
+  assert.equal((await PUT(nullBody)).status, 400)
+  // items içinde null öğe → matchId erişimi patlamamalı, 400 dönmalı
+  const res = await call(sup, { playerId: 'p1', items: [null] })
+  assert.equal(res.status, 400)
+  // uuid olmayan matchId → 400 (PostgREST 22P02 sızması yok)
+  const res2 = await call(sup, { playerId: 'p1', items: [{ matchId: 'm-open; drop', outcome: 'H' }] })
+  assert.equal(res2.status, 400)
+  // güvenli-aralık dışı playerId → 400; geçerli-biçim ama bilinmeyen → 404
+  const res3 = await call(sup, { playerId: "x'; --", items: [{ matchId: 'm-open', outcome: 'H' }] })
+  assert.equal(res3.status, 400)
+  const res4 = await call(sup, { playerId: 'yok-boyle-bir', items: [{ matchId: 'm-open', outcome: 'H' }] })
+  assert.equal(res4.status, 404)
+  assert.equal(sup.store.predictions.length, 0)
+})
+
 suite.test('bilinmeyen oyuncu 404, bilinmeyen maç 404', async () => {
   const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
   const resPlayer = await call(sup, {

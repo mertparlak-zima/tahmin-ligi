@@ -24,11 +24,19 @@ const colorOk = c => /^#[0-9a-fA-F]{6}$/.test(c ?? '')
 
 const cleanName = raw => String(raw ?? '').replace(/\s+/g, ' ').trim()
 
+/** id biçim bekçisi (#24 T3 review): uuid OLMAYAN id gerçek PostgREST'te
+ *  22P02 hatasıyla 500 + ham hata metni sızdırıyordu. Katı uuid zorlaması
+ *  demo/bellek-içi kimlik geleneğini ('p1', 'm-open', 'demo-tsl-5') kırardı —
+ *  bu yüzden güvenli karakter aralığı (harf/rakam/_/-, ≤64) yeterli: tırnak,
+ *  noktalı virgül, boşluk gibi çöp dostça 400 düşer. */
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+const idOk = id => typeof id === 'string' && ID_RE.test(id)
+
 // --- Uçlar (demo sunucusu da yeniden kullanır; export'lar test amaçlı) ---
 
 export async function createPlayer(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const name = cleanName(body.name)
+  const body = await request.json().catch(() => null)
+  const name = cleanName(body?.name)
   if (name.length < 2 || name.length > 40) {
     return json(400, { error: 'İsim 2-40 karakter olmalı.' })
   }
@@ -47,15 +55,17 @@ export async function createPlayer(supabase, request) {
     .single()
   if (error) {
     if (error.code === '23505') return json(400, { error: 'Bu isimde bir oyuncu zaten var.' })
-    return json(500, { error: `Oyuncu eklenemedi: ${error.message}` })
+    console.error('createPlayer:', error.message) // iç ayrıntı yalnız sunucuda
+    return json(500, { error: 'Oyuncu eklenemedi.' })
   }
   return json(201, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
 }
 
 export async function updatePlayer(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const { id } = body
+  const body = await request.json().catch(() => null)
+  const { id } = body ?? {}
   if (!id) return json(400, { error: 'id gerekli.' })
+  if (!idOk(id)) return json(400, { error: 'id geçersiz biçimde.' })
 
   const patch = {}
   if (body.name !== undefined) {
@@ -80,17 +90,31 @@ export async function updatePlayer(supabase, request) {
     .maybeSingle()
   if (error) {
     if (error.code === '23505') return json(400, { error: 'Bu isimde bir oyuncu zaten var.' })
-    return json(500, { error: `Oyuncu güncellenemedi: ${error.message}` })
+    console.error('updatePlayer:', error.message)
+    return json(500, { error: 'Oyuncu güncellenemedi.' })
   }
   if (!player) return json(404, { error: 'Oyuncu bulunamadı.' })
   return json(200, { ok: true, player: { ...player, initials: initialsOf(player.name) } })
 }
 
-/** Oyuncuyu GERÇEKTEN sil. Tahmini varsa reddeder (dostça hata). */
+/** Oyuncuyu GERÇEKTEN sil. Tahmini varsa reddeder (dostça hata). Yarış
+ *  penceresi (#24 T3 review): sayım→silme arasına concurrent tahmin yazımı
+ *  cascade silme yaratmasın diye FK migration'ı RESTRICT'e çeker (bkv.
+ * supabase/migrations/2026-11-players-restrict.sql); 23503 burada 409'a
+ *  düşer. Başarılı silmede avatar dosyası da temizlenir (yetim kalmasın). */
 export async function deletePlayer(supabase, request) {
-  const body = await request.json().catch(() => ({}))
-  const { id } = body
+  const body = await request.json().catch(() => null)
+  const { id } = body ?? {}
   if (!id) return json(400, { error: 'id gerekli.' })
+  if (!idOk(id)) return json(400, { error: 'id geçersiz biçimde.' })
+
+  // silinen oyuncunun avatar dosyasını sonra temizlemek için önce oku
+  const { data: target } = await supabase
+    .from('players')
+    .select('id, avatar_url')
+    .eq('id', id)
+    .maybeSingle()
+  if (!target) return json(404, { error: 'Oyuncu bulunamadı.' })
 
   const { count } = await supabase
     .from('predictions')
@@ -101,7 +125,20 @@ export async function deletePlayer(supabase, request) {
   }
 
   const { error } = await supabase.from('players').delete().eq('id', id)
-  if (error) return json(500, { error: `Oyuncu silinemedi: ${error.message}` })
+  if (error) {
+    // RESTRICT FK'sı devredeyse concurrent tahmin yazımı buraya düşer.
+    if (error.code === '23503') {
+      return json(409, { error: 'Oyuncunun tahminleri var; önce tahminleri silin.' })
+    }
+    return json(500, { error: 'Oyuncu silinemedi.' })
+  }
+  // avatar storage temizliği (hatası ana işlemi bozmaz)
+  if (typeof target.avatar_url === 'string' && target.avatar_url.includes('/avatars/')) {
+    const path = target.avatar_url.slice(target.avatar_url.indexOf('/avatars/') + '/avatars/'.length)
+    if (path.startsWith(`av-${id}-`)) {
+      try { await supabase.storage.from('avatars').remove([path]) } catch { /* sessiz */ }
+    }
+  }
   return json(200, { ok: true, deleted: id })
 }
 
@@ -123,7 +160,7 @@ async function handle(fn, request, method) {
     return await fn(supabase, request)
   } catch (err) {
     console.error(`${method} /api/players error:`, err.message)
-    return json(500, { error: 'İşlem başarısız.', detail: err.message })
+    return json(500, { error: 'İşlem başarısız.' })
   }
 }
 
