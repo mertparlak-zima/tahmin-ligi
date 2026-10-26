@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url'
 import { suite as espnSuite } from './espn.test.mjs'
 import { suite as targetsSuite } from './targets.test.mjs'
 import { suite as leagueSuite } from './league.test.mjs'
-import { suite as adminSuite } from './admin.test.mjs'
+import { suite as predictionsSuite } from './predictions.test.mjs'
+import { suite as playersSuite } from './players.test.mjs'
 import { suite as syncSuite } from './sync.test.mjs'
 import { suite as calendarSuite } from './calendar.test.mjs'
 import { suite as flowSuite } from './flow.test.mjs'
 
 const results = []
-for (const suite of [espnSuite, targetsSuite, leagueSuite, adminSuite, syncSuite, calendarSuite, flowSuite]) {
+for (const suite of [espnSuite, targetsSuite, leagueSuite, predictionsSuite, playersSuite, syncSuite, calendarSuite, flowSuite]) {
   results.push(await suite.run())
 }
 

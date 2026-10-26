@@ -4,7 +4,7 @@
 //   npm run demo        → derler + http://localhost:8787 üzerinde tam yığın
 //   npm run dev:api     → yalnız API (vite dev proxy'si ile birlikte)
 //
-// Yönetim şifresi: ADMIN_PASSWORD env'i ya da varsayılan "demo123".
+// #24 Faz 1: yazma uçları herkese açık (şifre/login yok).
 
 import http from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -17,13 +17,13 @@ import { maybeSync } from '../lib/sync.js'
 import { buildLeaguePayload } from '../lib/league.js'
 import { seasonYear } from '../lib/espn.js'
 import { GET as leagueGET } from '../api/league.js'
-import * as admin from '../api/admin.js'
+import { savePredictions } from '../api/predictions.js'
+import { createPlayer, updatePlayer, deletePlayer } from '../api/players.js'
+import { uploadAvatar, deleteAvatar } from '../api/players/avatar.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.join(__dirname, '..', 'dist')
 const PORT = Number(process.env.PORT || 8787)
-
-if (!process.env.ADMIN_PASSWORD) process.env.ADMIN_PASSWORD = 'demo123'
 
 // ----------------------------------------------------------------------
 // In-memory supabase-js adaptörü (yalnızca projenin kullandığı alt küme)
@@ -312,7 +312,7 @@ async function handleApi(request) {
 
   if (method === 'GET' && pathname === '/api/league') {
     // Gerçek uç kodu (#16): api/league.js GET — ETag/304 + ?season/?league
-    // doğrulaması dahil. Senkron kuyruğu korunur (admin senkronuyla serileşir).
+    // doğrulaması dahil. Açılış ısıtması senkronuyla serileşir.
     const started = Date.now()
     syncing = (syncing ?? Promise.resolve())
       .then(() => maybeSync(supabase))
@@ -356,30 +356,21 @@ async function handleApi(request) {
   const webReq = toWebRequest(request, await readBody(request).catch(() => ({})))
   const route = `${method} ${pathname}`
 
+  // #24 Faz 1: herkese açık yazma uçları (demo deposu enjekte edilir).
   switch (route) {
-    case 'POST /api/admin/login':
-      return admin.login(webReq)
-    case 'GET /api/admin/bootstrap':
-      // ?league= parametresi uca taşınır (#21); parametresiz → aktif EU.
-      return admin.bootstrap(supabase, webReq)
-    case 'PUT /api/admin/predictions':
-      return admin.savePredictions(supabase, webReq)
-    case 'POST /api/admin/players':
-      return admin.createPlayer(supabase, webReq)
-    case 'PATCH /api/admin/players':
-      return admin.updatePlayer(supabase, webReq)
-    case 'PUT /api/admin/scoring':
-      return admin.saveScoring(supabase, webReq)
-    case 'PUT /api/admin/players/avatar':
-      return admin.uploadAvatar(supabase, webReq)
-    case 'DELETE /api/admin/players/avatar':
+    case 'PUT /api/predictions':
+      return savePredictions(supabase, webReq)
+    case 'POST /api/players':
+      return createPlayer(supabase, webReq)
+    case 'PATCH /api/players':
+      return updatePlayer(supabase, webReq)
+    case 'DELETE /api/players':
+      return deletePlayer(supabase, webReq)
+    case 'POST /api/players/avatar':
+      return uploadAvatar(supabase, webReq)
+    case 'DELETE /api/players/avatar':
       // deleteAvatar gövde VEYA query playerId kabul eder (demo webReq'te ikisi de var).
-      return admin.deleteAvatar(supabase, webReq)
-    case 'POST /api/admin/sync': {
-      // Senkronizasyonları tek sıraya diz; çakışma olmasın.
-      syncing = (syncing ?? Promise.resolve()).then(() => admin.sync(supabase))
-      return syncing
-    }
+      return deleteAvatar(supabase, webReq)
     default:
       return new Response(JSON.stringify({ error: 'Bilinmeyen uç.' }), {
         status: 404,
@@ -430,7 +421,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log('Tahmin Ligi demo sunucusu')
   console.log(`  Adres        : http://localhost:${PORT}`)
-  console.log(`  Yönetim      : http://localhost:${PORT}/admin  (şifre: ${process.env.ADMIN_PASSWORD})`)
+  console.log(`  Tahmin girişi: herkese açık (/api/predictions, /api/players)`)
   console.log(`  Başlangıç    : 3 demo oyuncu (Ogün, Mert, Ece) · veriler bellekte, reset'te silinir`)
   console.log(`  Maç verisi   : gerçek ESPN · iki lig (EU: UEFA kupaları, TSL: Süper Lig tüm fikstür) · açılışta çekiliyor (~2-4 sn)`)
   // Açılışta ısıtma: ilk /api/league isteği beklemeden fikstürü çek.

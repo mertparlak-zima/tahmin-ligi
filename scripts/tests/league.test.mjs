@@ -1,7 +1,7 @@
-// C · lib/league.js testleri — mühür kuralları, puan durumu, meta, admin payload.
+// C · lib/league.js testleri — mühür kuralları, puan durumu, meta.
 
 import assert from 'node:assert/strict'
-import { buildAdminPayload, buildLeaguePayload, seasonLabel } from '../../lib/league.js'
+import { buildLeaguePayload, seasonLabel } from '../../lib/league.js'
 import { seasonYear } from '../../lib/espn.js'
 import { GET as leagueGET } from '../../api/league.js'
 import { createMemorySupabase, createSuite, hour, iso, runIfMain } from './helpers.mjs'
@@ -354,51 +354,7 @@ suite.test('meta.sync.lastSuccessAgeMinutes: taze → küçük değer, başarı 
   assert.equal(never.meta.sync.lastSuccessAgeMinutes, null, 'last_success yok → null')
 })
 
-// --- buildAdminPayload ---
-
-suite.test('buildAdminPayload: kilit bayrakları + "pid:mid" tahmin haritası', async () => {
-  const admin = await buildAdminPayload(mainSupabase())
-  const locked = Object.fromEntries(admin.matches.map(m => [m.id, m.locked]))
-  assert.equal(locked.m1, true, 'bitmiş kilitli')
-  assert.equal(locked.m3, true, 'canlı kilitli')
-  assert.equal(locked.m5, true, 'ertelenen kilitli')
-  assert.equal(locked.m4, false, 'gelecek maç açık')
-
-  assert.equal(admin.predictions['p1:m4'], 'H')
-  assert.equal(admin.predictions['p2:m5'], 'A')
-  assert.equal(admin.predictions['p3:m1'], 'A', 'admin pasif oyuncunun tahminini de görür')
-
-  const p3 = admin.players.find(p => p.id === 'p3')
-  assert.equal(p3.isActive, false, 'pasif oyuncu admin listesinde işaretli')
-  assert.deepEqual(admin.scoring, { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 })
-  assert.equal(admin.sync.id, 1)
-})
-
-suite.test('buildAdminPayload (U4): uzun takım adları + crest + competitions listesi', async () => {
-  const admin = await buildAdminPayload(mainSupabase())
-  const m4 = admin.matches.find(m => m.id === 'm4')
-  assert.equal(m4.homeShort, 'Fenerbahçe', 'homeShort korunur')
-  assert.equal(m4.awayShort, 'Lyon', 'awayShort korunur')
-  assert.equal(m4.homeName, 'Fenerbahçe', 'uzun ev sahibi adı')
-  assert.equal(m4.awayName, 'Lyon', 'uzun deplasman adı')
-  assert.equal(m4.homeCrest, 'https://a.espncdn.com/i/teamlogos/soccer/500/2393.png', 'ev crest URL')
-  assert.equal(m4.awayCrest, 'https://a.espncdn.com/i/teamlogos/soccer/500/194.png', 'deplasman crest URL')
-
-  const m1 = admin.matches.find(m => m.id === 'm1')
-  assert.equal(m1.homeName, 'Galatasaray')
-  assert.equal(m1.awayName, 'Barcelona')
-  assert.equal(m1.homeCrest, null, 'crest kolonu yoksa/null → null (deploy sırası güvenli)')
-  assert.equal(m1.awayCrest, null)
-
-  // Turnuva listesi public payload'daki desenle aynı: kod + uzun ad.
-  assert.deepEqual(admin.competitions, [
-    { code: 'CL', name: 'UEFA Şampiyonlar Ligi' },
-    { code: 'EL', name: 'UEFA Avrupa Ligi' },
-    { code: 'UECL', name: 'UEFA Konferans Ligi' },
-  ])
-})
-
-// --- Sezon/lig meta + izolasyon (v6 P5/P6/P2-bonus) ---
+// --- Sezon/lig meta + izolasyon (v6 P5/P6; bonuslar #24 ile kaldırıldı) ---
 
 suite.test('meta.season/seasons/leagues: seçili ligin sezonları desc sıralanır', async () => {
   const supM = createMemorySupabase({
@@ -442,7 +398,7 @@ suite.test('meta.season/seasons/leagues: seçili ligin sezonları desc sıralan�
   assert.deepEqual(oldP.meta.season, { year: SY - 1, label: labelOf(SY - 1) })
 })
 
-suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonluk (P2-bonus)', async () => {
+suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonus anahtarları yok sayılır (#24)', async () => {
   const supS = createMemorySupabase({
     players: [
       { id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true },
@@ -469,6 +425,7 @@ suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonlu
       { player_id: 'q1', match_id: 'm-new', outcome: 'H' }, // yeni sezonda yanlış
       { player_id: 'q2', match_id: 'm-new', outcome: 'A' }, // yeni sezonda doğru
     ],
+    // #24: bonus anahtarları tohumda dursa bile standings'e etki ETMEZ.
     app_config: [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
       { key: `bonus:${SY - 1}`, value: { q1: 2 } },
@@ -479,14 +436,14 @@ suite.test('sezon izolasyonu: standings yalnız o sezonu sayar; bonuslar sezonlu
   const oldP = await buildLeaguePayload(supS, { seasonYear: SY - 1 })
   assert.deepEqual(oldP.matches.map(m => m.id), ['m-old'])
   const oldSt = Object.fromEntries(oldP.standings.map(r => [r.id, r]))
-  assert.equal(oldSt.q1.points, 3, 'eski sezon: 1 doğru + o sezonun bonusu (2)')
+  assert.equal(oldSt.q1.points, 1, 'eski sezon: 1 doğru (bonus anahtarı yok sayılır)')
   assert.equal(oldSt.q1.played, 1)
-  assert.equal(oldSt.q2.points, 0, 'eski sezonda doğru yok; yeni sezon bonusu SIZMAZ')
+  assert.equal(oldSt.q2.points, 0, 'eski sezonda doğru yok')
 
   const newP = await buildLeaguePayload(supS) // varsayılan: aktif sezon
   assert.deepEqual(newP.matches.map(m => m.id), ['m-new'])
   const newSt = Object.fromEntries(newP.standings.map(r => [r.id, r]))
-  assert.equal(newSt.q2.points, 6, 'yeni sezon: 1 doğru + o sezonun bonusu (5)')
+  assert.equal(newSt.q2.points, 1, 'yeni sezon: 1 doğru (bonus anahtarı yok sayılır)')
   assert.equal(newSt.q1.points, 0, 'eski sezon doğrusu yeni sezona SIZMAZ')
   assert.equal(newP.players.find(pl => pl.id === 'q2').name, 'Bora', 'players listesi sezonluk veri taşır')
 })
@@ -556,10 +513,8 @@ suite.test('#21 TSL: standings yalnız TSL maçlarından; EU tablosu etkilenmez'
   assert.equal(est.q1.points, 0, 'TSL doğrusu EU puanına SIZMAZ')
   assert.deepEqual(est.q1.teamCorrect, { FB: 0, GS: 0, BJK: 0, TS: 0 }, 'TSL doğrusu EU teamCorrect\'e sızmaz')
 
-  // Admin payload da lig kapsamını izler (bootstrap ?league= kaynağı).
-  const admin = await buildAdminPayload(supT, { league: 'TSL' })
-  assert.deepEqual(admin.matches.map(m => m.id).sort(), ['t1', 't2'], 'admin editörü TSL kapsamında')
-  assert.deepEqual(admin.competitions, [{ code: 'TSL', name: 'Süper Lig' }])
+  // Admin payload da lig kapsamını izlerdi; #24 Faz 1 ile buildAdminPayload
+  // kaldırıldı — public payload'ın lig kapsaması üstteki iki çağrıyla ölçülür.
 })
 
 suite.test('#21 T3 review: recentPredictions lig kapsamıyla sınırlı — TSL girişi EU akışını iter mi', async () => {
@@ -608,7 +563,7 @@ suite.test('maçsız geçerli sezon → boş payload, standings sıfırlı kalı
   assert.deepEqual(p.meta.seasons.map(s => s.year), [SY], 'sezon listesi seçili ligin mevcut sezonları')
 })
 
-suite.test('#21 bonus: lig bazlı anahtar tercih edilir; eski biçim yalnız EU yedeği', async () => {
+suite.test('#24: bonus anahtarları standings\'e ARTIK etki etmez', async () => {
   const seed = extra => createMemorySupabase({
     players: [{ id: 'q1', name: 'Ada', color: '#b8f34a', is_active: true }],
     matches: [row({
@@ -616,30 +571,24 @@ suite.test('#21 bonus: lig bazlı anahtar tercih edilir; eski biçim yalnız EU 
       home_name: 'Galatasaray', home_short: 'Galatasaray',
       away_name: 'Barcelona', away_short: 'Barcelona',
       home_score: 2, away_score: 0,
-    })], // tahmin yok → standings puanı = yalnız bonus
+    })], // tahmin yok → standings puanı 0'dan başlar
     app_config: [
       { key: 'scoring', value: { label: 'x', status: 'provisional', correctOutcome: 1 } },
       ...extra,
     ],
   })
 
-  // 1) Her lig kendi lig bazlı anahtarını okur; çapraz sıçrama yok.
+  // Lig bazlı VE göç öncesi eski biçim anahtarlar tohumda dursa da puan 0'dır
+  // (bonus okuma #24 ile lib/league.js'ten tamamen çıkarıldı).
   const supB = seed([
     { key: `bonus:EU:${SY}`, value: { q1: 2 } },
     { key: `bonus:TSL:${SY}`, value: { q1: 5 } },
+    { key: `bonus:${SY}`, value: { q1: 7 } },
   ])
   const eu = await buildLeaguePayload(supB, { league: 'EU' })
-  assert.equal(eu.standings.find(r => r.id === 'q1').points, 2, 'EU bonusu bonus:EU:<sezon>')
+  assert.equal(eu.standings.find(r => r.id === 'q1').points, 0, 'bonus:EU / eski bonus:<sezon> yok sayılır')
   const tsl = await buildLeaguePayload(supB, { league: 'TSL' })
-  assert.equal(tsl.standings.find(r => r.id === 'q1').points, 5, 'TSL bonusu bonus:TSL:<sezon>')
-
-  // 2) Göç penceresi: bonus:EU yoksa EU eski bonus:<sezon>'a düşer; TSL DÜŞMEZ
-  //    (eski anahtar çoklu lig öncesi EU verisidir — TSL'e sızmamalı).
-  const supL = seed([{ key: `bonus:${SY}`, value: { q1: 7 } }])
-  const euLegacy = await buildLeaguePayload(supL, { league: 'EU' })
-  assert.equal(euLegacy.standings.find(r => r.id === 'q1').points, 7, 'EU eski anahtara düşer (göç güvenliği)')
-  const tslLegacy = await buildLeaguePayload(supL, { league: 'TSL' })
-  assert.equal(tslLegacy.standings.find(r => r.id === 'q1').points, 0, 'TSL eski (EU) bonusunu ALMAZ')
+  assert.equal(tsl.standings.find(r => r.id === 'q1').points, 0, 'bonus:TSL yok sayılır')
 })
 
 suite.test('api /api/league GET: bilinmeyen lig 400, geçersiz sezon 400', async () => {

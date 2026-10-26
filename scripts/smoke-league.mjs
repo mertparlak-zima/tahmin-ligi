@@ -15,8 +15,8 @@ const players = [
   { id: 'p1', name: 'Ogün', color: '#b8f34a', is_active: true },
   { id: 'p2', name: 'Mert', color: '#5ce1e6', is_active: true },
   { id: 'p3', name: 'Eski', color: '#ff9f68', is_active: false },
-  // bonus_points LEGACY kolon: artık okunmaz (P2-bonus); p4'nün bonusu
-  // aşağıda app_config `bonus:EU:<sezon>` anahtarından gelir.
+  // bonus_points LEGACY kolonu ve app_config bonus anahtarları artık okunmaz
+  // (#24: bonus puanlar kaldırıldı; standings 0'dan başlar).
   { id: 'p4', name: 'Bonuslu', color: '#ffd05c', is_active: true, bonus_points: 2 },
 ]
 
@@ -86,7 +86,7 @@ const predictions = [
   { player_id: 'p2', match_id: 'm1', outcome: 'A', created_at: iso(now - 49 * hour), updated_at: iso(now - 49 * hour) }, // doğru → 1 puan
   { player_id: 'p2', match_id: 'm2', outcome: 'D', created_at: iso(now - 51 * hour), updated_at: iso(now - 12 * hour) }, // yanlış (güncellendi)
   { player_id: 'p3', match_id: 'm1', outcome: 'A', created_at: iso(now - 48 * hour), updated_at: iso(now - 48 * hour) }, // pasif oyuncu → sayılmamalı
-  { player_id: 'p4', match_id: 'm1', outcome: 'A', created_at: iso(now - 47 * hour), updated_at: iso(now - 47 * hour) }, // doğru → 1 + 2 bonus = 3 puan
+  { player_id: 'p4', match_id: 'm1', outcome: 'A', created_at: iso(now - 47 * hour), updated_at: iso(now - 47 * hour) }, // doğru → 1 puan (bonus yok, #24)
   // #21 TSL tahminleri: t1 GS kazanır (H), t3 beraberlik (D), t2 gelecek → mühürlü.
   { player_id: 'p1', match_id: 't1', outcome: 'H', created_at: iso(now - 46 * hour), updated_at: iso(now - 46 * hour) }, // doğru → TSL 1 puan
   { player_id: 'p1', match_id: 't3', outcome: 'D', created_at: iso(now - 22 * hour), updated_at: iso(now - 22 * hour) }, // doğru → TSL 1 puan
@@ -100,7 +100,8 @@ function mockSupabase() {
     players, matches, predictions,
     app_config: [
       { key: 'scoring', value: { label: 'Test', status: 'final', correctOutcome: 1 } },
-      // #21 lig bazlı sezonluk bonus (P2-bonus): {playerId: puan}.
+      // #24: lig bazlı sezonluk bonus anahtarları tohumda kalır — artık yok
+      // sayılır (standings 0'dan başlar).
       { key: `bonus:EU:${SY}`, value: { p4: 2 } },
       { key: `bonus:TSL:${SY}`, value: { p2: 1 } },
     ],
@@ -173,9 +174,9 @@ assert.equal(ogun.teamCorrect.GS, 0, 'TSL GS doğrusu EU teamCorrect\'e sızmaz'
 // p2 m1 (Galatasaray maçı, Barcelona yener) doğru → GS=1
 assert.equal(mert.teamCorrect.GS, 1)
 
-// Bonus puan: p4 doğru sonuç (1) + EU bonusu (2) = 3
+// #24: p4 doğru sonuç 1 puan — bonus anahtarları yok sayılır
 const bonuslu = payload.standings.find(r => r.id === 'p4')
-assert.equal(bonuslu.points, 3)
+assert.equal(bonuslu.points, 1)
 
 // Sıralama: eşit puan → doğru sayısı → isim
 assert.equal(payload.standings[0].rank, 1)
@@ -203,7 +204,7 @@ const tBonuslu = tslPayload.standings.find(r => r.id === 'p4')
 assert.equal(tOgun.points, 2, 'TSL: t1+t3 doğru; EU doğruları sızmaz')
 assert.equal(tOgun.played, 2)
 assert.equal(tOgun.teamCorrect.GS, 1, 'TSL GS doğrusu TSL tablosunda')
-assert.equal(tMert.points, 1, 'TSL bonusu (bonus:TSL:1 puan) — tahmin doğrusu yok')
+assert.equal(tMert.points, 0, 'TSL tahmin doğrusu yok — bonus anahtarı yok sayılır (#24)')
 assert.equal(tBonuslu.points, 0, 'EU bonusu TSL tablosuna SIZMAZ')
 
 // --- U9: payload boyut bilgisi (kapı DEĞİL; öncesi/sonrası leader karşılaştırır) ---
