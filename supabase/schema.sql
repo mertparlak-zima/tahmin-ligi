@@ -56,7 +56,10 @@ create index if not exists matches_status_idx on matches (status);
 create index if not exists matches_league_season_idx on matches (league, season_year);
 
 create table if not exists predictions (
-  player_id  uuid not null references players (id) on delete cascade,
+  -- #24: RESTRICT — public oyuncu silmede yarış penceresi (sayım→DELETE
+  -- arası concurrent tahmin yazımı) cascade kaybını engeller (bkv.
+  -- migrations/2026-11-players-restrict.sql).
+  player_id  uuid not null references players (id) on delete restrict,
   match_id   uuid not null references matches (id) on delete cascade,
   outcome    char(1) not null check (outcome in ('H', 'D', 'A')),
   created_at timestamptz not null default now(),

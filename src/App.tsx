@@ -1,8 +1,7 @@
-import { Component, RouterView, Link } from '@geajs/core'
+import { Component, RouterView } from '@geajs/core'
 import { router } from './router'
 import leagueStore from './stores/league-store'
 import uiStore from './stores/ui-store'
-import adminStore from './stores/admin-store'
 import TopBar from './components/TopBar'
 import MainNav from './components/MainNav'
 import IdentityModal from './components/IdentityModal'
@@ -21,18 +20,11 @@ export default class App extends Component {
         uiStore.closeIdentityModal()
       }
     })
-    // Admin modu görsel uyarısı (#20 U3): body sınıfı authed ile senkron.
-    // observe yalnız değişimde tetiklenir → ilk değer (sessionStorage'dan
-    // gelen authed) elle uygulanır; 401→logout yolu sınıfı düşürür.
-    const applyAdminMode = () => {
-      document.body.classList.toggle('admin-mode', adminStore.authed)
-    }
-    applyAdminMode()
-    adminStore.observe('authed', applyAdminMode)
-    // #21 Faz 2: lig teması body sınıfı — admin-mode deseniyle aynı: ilk
-    // değer (localStorage'dan gelen lig) elle uygulanır, observe değişimde
-    // (switchLeague) sınıfları tazeler. CSS değişkenleri + zemin logosu
-    // body.league-eu / body.league-tsl bloklarından gelir.
+    // #21 Faz 2: lig teması body sınıfı — ilk değer (localStorage'dan gelen
+    // lig) elle uygulanır, observe değişimde (switchLeague) sınıfları tazeler.
+    // CSS değişkenleri + zemin logosu body.league-eu / body.league-tsl
+    // bloklarından gelir. (#24 Faz 2: admin-mode body sınıfı ve adminStore
+    // bağlantısı yönetim paneliyle birlikte kaldırıldı.)
     const applyLeagueTheme = () => {
       document.body.classList.remove('league-eu', 'league-tsl')
       document.body.classList.add(leagueStore.league === 'TSL' ? 'league-tsl' : 'league-eu')
@@ -53,7 +45,6 @@ export default class App extends Component {
           <footer class="footer">
             <span>{leagueStore.data?.meta?.leagueName ?? 'Tahmin Ligi'} · arkadaşlar arası tahmin ligi</span>
             <span class="footer-right">Veri: ESPN</span>
-            <Link to="/admin" class="footer-admin">Yönetim</Link>
           </footer>
           <IdentityModal />
           <Toasts />

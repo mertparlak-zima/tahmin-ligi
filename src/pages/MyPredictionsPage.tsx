@@ -7,12 +7,14 @@
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
+import avatarStore from '../stores/avatar-store'
 import Avatar from '../components/Avatar'
 import FormChips from '../components/FormChips'
 import PredictionCard from '../components/PredictionCard'
 import Crest from '../components/Crest'
 import CompBadge from '../components/CompBadge'
 import SkeletonCard from '../components/SkeletonCard'
+import AvatarCropModal from '../components/AvatarCropModal'
 import { fmtFullDate, fmtTime } from '../utils/format'
 import { cn } from '../utils/cn'
 
@@ -85,6 +87,18 @@ class PlayerDetail extends Component {
             <span class="identity-sub">
               {player ? `${player.rank}. sırada · ${player.played} maçta tahmin` : 'Henüz sıralaması yok'}
             </span>
+            {/* #24 Faz 2: avatar yükle/değiştir/kaldır — eski admin Oyuncular
+                sekmesinden buraya taşındı (kırpma modalı avatar-store'a bağlı). */}
+            {pRow ? (
+              <span class="avatar-actions">
+                <button class="btn ghost sm" click={() => avatarStore.openEditor(pRow)}>
+                  {pRow.avatarUrl ? 'Fotoğrafı değiştir' : 'Fotoğraf yükle'}
+                </button>
+                {pRow.avatarUrl ? (
+                  <button class="btn ghost sm" click={() => avatarStore.remove(pRow.id)}>Kaldır</button>
+                ) : null}
+              </span>
+            ) : null}
           </div>
           {uiStore.identityId === playerId ? (
             <span class="you-tag">SEN</span>
@@ -92,6 +106,7 @@ class PlayerDetail extends Component {
             <button class="btn ghost sm" click={() => uiStore.setIdentity(playerId)}>Bu benim</button>
           )}
         </div>
+        <AvatarCropModal />
 
         <div class="stat-cards">
           <div class="stat-card">
@@ -190,7 +205,7 @@ export default class PlayersPage extends Component {
             {standings.length === 0 ? (
               <div class="empty big">
                 <div class="empty-title">Henüz oyuncu yok</div>
-                <div class="empty-sub">Oyuncular yönetim panelinden eklenir.</div>
+                <div class="empty-sub">Maçlar sayfasında bir maç açıp '+ Oyuncu' ile ekle.</div>
               </div>
             ) : null}
           </div>

@@ -50,8 +50,10 @@ npm run dev:api               # in-memory demo API (DB gerektirmez, 8787)
 npm run dev:db                # GERÇEK Supabase'li tam yığın (8787, .env gerekli)
 npm run demo                  # build + in-memory demo sunucu
 npm run check:db              # Supabase bağlantı/şema/senkron doğrulaması
-node --env-file=.env scripts/e2e-local.mjs        # API uçtan uca (12 test)
-node --env-file=.env scripts/browser-check.mjs    # headless tarayıcı UI turu
+node --env-file=.env scripts/e2e-local.mjs        # API uçtan uca (public akış)
+node scripts/browser-check.mjs                    # headless tarayıcı UI turu
+                                                  # (yalnız localhost; sunucu tohumlu
+                                                  # açılırsa DEMO_TSL_SEED=1)
 node scripts/smoke-espn.mjs                       # gerçek ESPN çekimi
 node scripts/smoke-league.mjs                     # payload/puanlama (mock)
 node scripts/smoke-sync.mjs                       # senkron mantığı (mock)
@@ -87,7 +89,8 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
 7. **Keyed listeler JSX içinde DOĞRUDAN store erişimiyle map'lenmeli**
    (`store.getter.map(...)`). Gövdede çok adımlı türetilmiş local diziyi
    map'lemek listeyi sessizce boşaltır. Türetmeyi store getter'ının içine
-   taşı (bkv. league-store `resultsByDay`, admin-store `editorDays`).
+   taşı (bkv. league-store `resultsByDay`; #24 öncesi admin-store
+   `editorDays` örneği).
 8. Fonksiyon içinde JSX döndüren yardımcı fonksiyonlardan kaçın; koşulları
    JSX içinde iç içe ternary ile yaz. Fragment `.map()` kökü yok, dinamik
    component etiketi yok, `<option selected={...}>` yerine
@@ -133,9 +136,14 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
 - **Yeni lig**: `lib/targets.js` içindeki `LEAGUES` kayıt defterine kayıt
   eklenerek açılır; ESPN kaynak slug'ları `lib/espn.js` `LEAGUE_SOURCES`'ta
   tanımlanır (lig kodu → slug/turnuva eşlemesi). Kayıt defteri sunucu
-  tarafını açar; istemcide DE `leagueStore`/`adminStore` `switchLeague`
+  tarafını açar; istemcide DE `leagueStore`/`predictionsStore` `switchLeague`
   bekçileri ve `AccuracyTable` kolonları elle güncellenmelidir (iki lig
   'EU'|'TSL' sabitidir — üçüncü lig src işi gerektirir).
+- **Yönetim paneli yoktur (#24)**: tahmin girişi maç akordiyonundaki herkese
+  açık formdadir (`PUT /api/predictions`); oyuncu ekleme/avatar de uçlar
+  herkese açıktır. Erişim güvenliği Vercel Deployment Protection'a dayanır —
+  README'deki güvenlik notuna bak. Mühür ve kilit kuralları API'de zorunlu
+  kalır; bunları gevşeten değişiklik ASLA yapılmaz.
 - **Gea skill'leri** `.agents/skills/` altında; yeni Gea kodu yazmadan
   `gea-framework` skill'ini oku.
 - **CI ve Runner**: Tüm CI koşuları (`ci.yml`) GitHub-hosted yerine yerel self-hosted Docker runner (`tahmin-ligi-docker-1`, label `[self-hosted, linux, x64, docker, tahmin-ligi]`, `infra/runner/compose.yml`, başlatma `scripts/start-ci-runner.ps1`) üzerinde çalışır. GitHub-hosted runner kullanımı yasaktır.

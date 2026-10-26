@@ -1,10 +1,11 @@
 // Gerçek Supabase'e bağlanan lokal tam-yığın sunucu.
 // dist/ dosyalarını + gerçek API handler'larını servis eder.
 //
-//   1) .env dosyasına SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / ADMIN_PASSWORD yaz
+//   1) .env dosyasına SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY yaz
 //   2) npm run build
 //   3) npm run dev:db
 //
+// #24 Faz 1: yazma uçları herkese açık (şifre/login yok).
 import http from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -12,14 +13,19 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { GET as leagueGET } from '../api/league.js'
-import * as adminApi from '../api/admin.js'
+import * as predictionsApi from '../api/predictions.js'
+import * as playersApi from '../api/players.js'
+import * as avatarApi from '../api/players/avatar.js'
 
-const adminMethods = {
-  GET: adminApi.GET,
-  POST: adminApi.POST,
-  PUT: adminApi.PUT,
-  PATCH: adminApi.PATCH,
-  DELETE: adminApi.DELETE,
+// Yöntem → yol eşlemesi: her uç kendi named method export'unu çalıştırır
+// (supabase env'den kurulur; readonly ucu 503 verir).
+const apiRoutes = {
+  'PUT /api/predictions': predictionsApi.PUT,
+  'POST /api/players': playersApi.POST,
+  'PATCH /api/players': playersApi.PATCH,
+  'DELETE /api/players': playersApi.DELETE,
+  'POST /api/players/avatar': avatarApi.POST,
+  'DELETE /api/players/avatar': avatarApi.DELETE,
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -66,9 +72,14 @@ const server = http.createServer(async (req, res) => {
         headers: req.headers,
         body,
       })
-      const handler = url.pathname.startsWith('/api/admin')
-        ? adminMethods[req.method] ?? adminApi.GET
-        : leagueGET
+      const handler = req.method === 'GET' && url.pathname.replace(/\/+$/, '') === '/api/league'
+        ? leagueGET
+        : apiRoutes[`${req.method} ${url.pathname.replace(/\/+$/, '')}`]
+      if (!handler) {
+        res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ error: 'Bilinmeyen uç.' }))
+        return
+      }
       const response = await handler(webReq)
       res.writeHead(response.status, Object.fromEntries(response.headers))
       res.end(await response.text())
@@ -91,7 +102,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log('Tahmin Ligi — lokal sunucu (gerçek Supabase)')
-  console.log(`  Adres   : http://localhost:${PORT}`)
-  console.log(`  Yönetim : http://localhost:${PORT}/admin`)
-  console.log(`  Not     : şifre .env içindeki ADMIN_PASSWORD`)
+  console.log(`  Adres        : http://localhost:${PORT}`)
+  console.log(`  Tahmin girişi: herkese açık (/api/predictions, /api/players)`)
 })
