@@ -220,6 +220,65 @@ suite.test('takip filtresi: yalnız 4 büyükler maçları izlenir, adlar kanoni
   assert.equal(bjk.home.short, 'Beşiktaş')
 })
 
+// --- #21 Süper Lig kaynağı (tur.1) ---
+
+const TUR1 = 'tur.1/scoreboard'
+
+const tslEvent = (id, dayMs, homeName, awayName) => espnEvent({
+  id,
+  seasonYear: SY,
+  date: iso(Date.parse(dayMs)),
+  week: null, // tur.1'de week boş gelir → matchday null (kolon nullable)
+  statusName: 'STATUS_SCHEDULED',
+  state: 'pre',
+  home: { displayName: homeName, shortDisplayName: homeName },
+  away: { displayName: awayName, shortDisplayName: awayName },
+})
+
+suite.test('#21 TSL: tur.1 TÜM maçları gelir (takım filtresi yok), kod TSL', async () => {
+  const stub = withStubbedFetch([
+    [TUR1, {
+      events: [
+        tslEvent(201, '2026-10-16T16:00:00Z', 'Samsunspor', 'Konyaspor'), // takipsiz × takipsiz
+        tslEvent(202, '2026-10-17T16:00:00Z', 'Istanbul Basaksehir', 'Galatasaray SK'),
+        tslEvent(203, '2026-10-18T16:00:00Z', 'Antalyaspor', 'Goztepe'),
+      ],
+    }],
+  ])
+  try {
+    const result = await fetchTrackedMatches(NOW, { league: 'TSL' })
+    assert.equal(result.matches.length, 3, 'TSL maçlarında takım filtresi YOK — hepsi kalır')
+    assert.ok(result.matches.every(m => m.competitionCode === 'TSL'), 'competitionCode TSL')
+    assert.ok(result.matches.every(m => m.matchday === null), 'week boş → matchday null')
+    assert.equal(result.matches.find(m => m.externalId === '202').away.name, 'Galatasaray', 'kanonik ad TSL tarafında da korunur')
+    assert.equal(result.matches.find(m => m.externalId === '201').away.name, 'Konyaspor', 'takip dışı ad olduğu gibi kalır')
+    assert.equal(result.complete, true)
+    // TSL turu yalnız tur.1 kaynağını okur: tek slug × 2 yıl, UEFA istenmez.
+    assert.equal(stub.calls.length, 2)
+    assert.ok(stub.calls.every(u => u.includes('tur.1/')), 'UEFA slug\'ları hiç çağrılmaz')
+  } finally {
+    stub.restore()
+  }
+})
+
+suite.test('#21 TSL: bilinmeyen lig kodu fetch\'i reddeder', async () => {
+  await assert.rejects(
+    () => fetchTrackedMatches(NOW, { league: 'XX' }),
+    /Bilinmeyen lig/,
+  )
+})
+
+suite.test('#21 EU (varsayılan): tur.1 kaynağı okunmaz', async () => {
+  const stub = withStubbedFetch([])
+  try {
+    await fetchTrackedMatches(NOW) // league verilmeyince EU
+    assert.equal(stub.calls.length, 6, '3 UEFA slug × 2 yıl')
+    assert.ok(stub.calls.every(u => u.includes('uefa.')), 'EU turu UEFA kaynaklarıyla sınırlı')
+  } finally {
+    stub.restore()
+  }
+})
+
 // --- complete bayrağı ---
 
 suite.test('bir kaynak hata verirse complete=false, maçlar yine döner', async () => {

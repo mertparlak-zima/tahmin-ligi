@@ -467,7 +467,8 @@ suite.test('bütçe: maybeSync hatayı yutar, bütçe içinde döner', async () 
     await assert.doesNotReject(() => maybeSync(supM, 90, { fetchDeadlineMs: 150 }))
     assert.ok(Date.now() - started < 2000, 'maybeSync bütçe içinde döner')
     assert.ok(supM.store.sync_state[0].last_error.includes('bütçe'), 'hata last_error\'e taşınır')
-    assert.equal(stub.calls.length, 6)
+    // #21: EU 6 deneme (3 slug × 2 yıl) + TSL 2 deneme (tur.1 × 2 yıl) = 8.
+    assert.equal(stub.calls.length, 8)
   } finally {
     stub.restore()
   }
@@ -617,6 +618,112 @@ suite.test('R7 onarım: flag\'i null satır imza AYNI olsa bile yeniden yazılı
   // İkinci tur: flag artık dolu + imza aynı → bir daha dokunulmaz.
   const second = await syncWith(supG, [[CHAMPIONS, { events: [evFinished()] }]])
   assert.equal(second.changed, 0, 'onarım sonrası tur normal atlamaya döner')
+})
+
+// --- S15: çoklu lig senkronu (#21) ---
+
+const TUR1 = 'tur.1/scoreboard' // yıl duyarsız (dates=SY ve SY+1 ikisi de)
+
+// TSL fixture'ları: takip dışı takımlar bile TSL ligince izlenir (filtre yok).
+const evTsl = (id, ms = T0 + 40 * hour) => espnEvent({
+  id,
+  seasonYear: SY,
+  date: iso(ms),
+  week: null, // tur.1 week taşımaz → matchday null
+  statusName: 'STATUS_SCHEDULED',
+  state: 'pre',
+  timeValid: true,
+  home: { displayName: 'Samsunspor' },
+  away: { displayName: 'Konyaspor' },
+})
+
+const evTslFinished = () => espnEvent({
+  id: 6101,
+  seasonYear: SY,
+  date: iso(T0 - 72 * hour),
+  week: null,
+  statusName: 'STATUS_FINAL',
+  state: 'post',
+  home: { displayName: 'Istanbul Basaksehir', score: { displayValue: '2' } },
+  away: { displayName: 'Konyaspor', score: { displayValue: '1' } },
+})
+
+suite.test('TSL turu: satırlar league=TSL + competition=TSL yazılır', async () => {
+  const supT = createMemorySupabase()
+  const result = await syncWith(supT, [[TUR1, { events: [evTslFinished(), evTsl(6102)] }]], undefined, { league: 'TSL' })
+  assert.deepEqual(result, { ok: true, matchesSeen: 2, changed: 2, complete: true })
+  assert.equal(supT.store.matches.length, 2)
+  for (const m of supT.store.matches) {
+    assert.equal(m.league, 'TSL', 'lig enjeksiyonu')
+    assert.equal(m.competition, 'TSL', 'tek turnuva kodu')
+    assert.equal(m.season_year, SY)
+    assert.equal(m.matchday, null, 'week yok → matchday null (kolon nullable)')
+  }
+})
+
+suite.test('TSL prune: kapsam lige özgü — TSL turu EU satırını silmez, kendi artığını siler', async () => {
+  const supP = createMemorySupabase({
+    matches: [
+      // EU artığı: yanıtta yok ama TSL turunun kapsamı dışında → DOKUNULMAZ.
+      storedRow('eu-f', '9501', 'TIMED', T0 + 72 * hour, null, null, 'Beşiktaş', 'Marseille'),
+      // TSL artığı: TSL turunda yanıtta yok → prune adayı.
+      { ...storedRow('tsl-f', '9511', 'TIMED', T0 + 72 * hour, null, null, 'Samsunspor', 'Konyaspor'), league: 'TSL', competition: 'TSL' },
+    ],
+  })
+  const result = await syncWith(supP, [[TUR1, { events: [evTslFinished()] }]], undefined, { league: 'TSL' })
+  assert.equal(result.complete, true)
+  assert.ok(supP.store.matches.some(m => m.external_id === '9501'), 'EU satırı TSL turundan korunur')
+  assert.ok(!supP.store.matches.some(m => m.external_id === '9511'), 'TSL artığı TSL turunda silinir')
+})
+
+suite.test('maybeSync #21: tüm aktif ligler senkronlanır; matches_seen toplam, hata birleşik', async () => {
+  const staleSeed = () => ({
+    sync_state: [{
+      id: 1,
+      last_attempt_at: iso(Date.now() - 2 * hour),
+      last_success_at: iso(Date.now() - 2 * hour),
+      last_error: null,
+      matches_seen: 0,
+      updated_at: iso(T0),
+    }],
+  })
+
+  // 1) İki lig de sağlam: EU 1 maç + TSL 2 maç; küresel özet toplamı taşır.
+  const supOk = createMemorySupabase(staleSeed())
+  const stubOk = withStubbedFetch([
+    [CHAMPIONS, { events: [evFinished()] }],
+    [TUR1, { events: [evTslFinished(), evTsl(6102)] }],
+  ])
+  try {
+    await maybeSync(supOk, 90)
+    const leagues = new Set(supOk.store.matches.map(m => m.league))
+    assert.deepEqual([...leagues].sort(), ['EU', 'TSL'], 'iki lig de yazıldı')
+    assert.equal(supOk.store.matches.filter(m => m.league === 'EU').length, 1, 'EU satırı EU ligiyle')
+    assert.equal(supOk.store.matches.filter(m => m.league === 'TSL').length, 2, 'TSL satırları TSL ligiyle')
+    assert.equal(supOk.store.sync_state[0].matches_seen, 3, 'matches_seen = EU + TSL toplamı')
+    assert.equal(supOk.store.sync_state[0].last_error, null)
+    assert.ok(supOk.store.sync_state[0].last_success_at, 'başarı damgası yazılır')
+  } finally {
+    stubOk.restore()
+  }
+
+  // 2) EU sağlam + TSL hatalı: maybeSync patlamaz, hata birleşik not taşır.
+  const supFail = createMemorySupabase(staleSeed())
+  const stubFail = withStubbedFetch([
+    [CHAMPIONS, { events: [evFinished()] }],
+    [TUR1, new Error('tur.1 kaynağı kapandı')],
+  ])
+  try {
+    await assert.doesNotReject(() => maybeSync(supFail, 90), 'tek lig hatası maybeSync\'i patlatmaz')
+    assert.equal(supFail.store.matches.filter(m => m.league === 'EU').length, 1, 'EU turu tamamlandı')
+    assert.equal(supFail.store.matches.filter(m => m.league === 'TSL').length, 0, 'TSL turu yazamadı')
+    const err = supFail.store.sync_state[0].last_error
+    assert.ok(err.includes('TSL') && err.includes('tur.1'), `last_error lig koduyla birleşir: ${err.slice(0, 80)}`)
+    assert.equal(supFail.store.sync_state[0].matches_seen, 1, 'toplam yalnız başarılı ligin maçları')
+    assert.ok(supFail.store.sync_state[0].last_success_at, 'EU başarısı damgalanır')
+  } finally {
+    stubFail.restore()
+  }
 })
 
 await runIfMain(suite)
