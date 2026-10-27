@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/notify", "schedule": "20 21 * * *" }
+  ],
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30

@@ -54,6 +54,25 @@ ve arka planda tazelenir (stale-while-revalidate); içerik değişmediğinde
 sunucu ETag/If-None-Match ile gövdesiz **304** yanıtı döner. (#24 ile manuel
 senkron düğmesi kaldırıldı — lazy senkron + bayatlık bandı yeterlidir.)
 
+### Discord gece özeti (#29)
+
+Her gece **00:20 TR** (21:20 UTC)'de Vercel cron (`vercel.json → crons`)
+`GET /api/notify` ucunu `Authorization: Bearer CRON_SECRET` ile çağırır. Uç
+önce senkronu tazeler (site hiç açılmasa bile final skorlar DB'ye düşer),
+sonra **bitmiş + en az 1 (aktif) tahminli + henüz gönderilmemiş** maçları tek
+**sade düz metin** özetinde Discord webhook'una gönderir: skor + oyuncu
+başına ✅/❌ ve puan, altta güncel lig puan durumu. Aynı maç ikinci kez
+gönderilemez: `match_notifications` tablosu maç başına tek seferlik flag
+tutar (migration, geçmiş bitmiş maçları da "gönderilmiş" olarak tohumlar).
+Discord gönderimi başarısızsa flag yazılmaz → ertesi gece otomatik yeniden
+denenir. Tahminli biten maç yoksa mesaj gitmez; tahminsiz biten maçlar
+sessizce flag'lenir. İki lig aynı özette toplanır; UEFA kupaları kısa
+etiket taşır (ŞL/AL/KL). Güvenlik: oyuncu adları sanitize edilir ve
+`allowed_mentions` tamamen kapalıdır (`@everyone` enjeksiyonu imkânsız).
+Ortam değişkenleri (yalnız sunucu): `DISCORD_WEBHOOK_URL`, `CRON_SECRET`
+(tanımsızsa üretim ucu 503 ile kapalıdır). Önizleme: `npm run notify:dry`
+(gerçek DB'den göndermeden; `--send` ile gönderir).
+
 ### Sağlamlık kuralları
 
 - Maçlar `(provider, external_id)` anahtarıyla idempotent yazılır.
@@ -86,6 +105,12 @@ kopyası). `league`/`season_year` kolonları zaten #18'in
 Kod önce deploy edilirse TSL senkron upsert'leri eski constraint'e takılır;
 SQL önce işlenirse mevcut Avrupa verisi etkilenmez (varsayılan lig `EU`).
 
+**Migration deploy sırası (#29):** Discord gece özeti kodu canlıya çıkmadan
+ÖNCE `supabase/migrations/2026-11-match-notifications.sql` çalıştırılmalıdır
+(tablo + geçmiş bitmiş maçların tohum flag'i — ilk cron turu tüm sezonu
+dökmesin). Kod önce deploy edilirse uç zararsız biçimde hata verip mesaj
+göndermez; migration sonrası kendi kendine düzelir.
+
 ### Vercel
 
 1. Projeyi Vercel'e bağla (Vite otomatik algılanır).
@@ -95,8 +120,10 @@ SQL önce işlenirse mevcut Avrupa verisi etkilenmez (varsayılan lig `EU`).
 | --- | --- |
 | `SUPABASE_URL` | Supabase proje URL'i |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role anahtarı (yalnız server'da) |
+| `DISCORD_WEBHOOK_URL` | (#29) gece özeti webhook URL'i — yalnız server; tanımsızsa uç dry-run'a düşer |
+| `CRON_SECRET` | (#29) cron isteğini imzalar; tanımsızsa `/api/notify` üretimde 503 ile kapalıdır |
 
-Bu ikisi zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
+Bu ilk ikisi zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
 env'e girilmezse kod içindeki varsayılanlarla çalışır. (#24 ile `ADMIN_PASSWORD`
 kaldırıldı — eski dağıtımlarda env'de kalması zararsızdır, okunmaz.)
 
