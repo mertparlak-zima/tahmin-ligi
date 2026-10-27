@@ -1,5 +1,4 @@
 import leagueStore from '../stores/league-store'
-import uiStore from '../stores/ui-store'
 import StandingsRow from './StandingsRow'
 
 export default function StandingsTable({ standings }: { standings: any[] }) {
@@ -27,7 +26,7 @@ export default function StandingsTable({ standings }: { standings: any[] }) {
         </thead>
         <tbody>
           {standings.map(row => (
-            <StandingsRow key={row.id} row={row} isOwn={row.id === uiStore.identityId} />
+            <StandingsRow key={row.id} row={row} />
           ))}
         </tbody>
       </table>

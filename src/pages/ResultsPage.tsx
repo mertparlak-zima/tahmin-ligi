@@ -5,7 +5,6 @@
 
 import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
-import uiStore from '../stores/ui-store'
 import SkeletonCard from '../components/SkeletonCard'
 import Avatar from '../components/Avatar'
 import CompBadge from '../components/CompBadge'
@@ -20,7 +19,7 @@ class FlowEventRow extends Component {
         {isPred ? (
           <Avatar color={event.playerColor} initials={event.playerInitials} size="sm" photo={event.playerAvatarUrl} />
         ) : (
-          <span class="flow-result-badge" aria-hidden="true">FT</span>
+          <span class="flow-result-badge" aria-hidden="true">MS</span>
         )}
         <span class="flow-body">
           <span class="flow-text">
@@ -71,20 +70,18 @@ export default class FlowPage extends Component {
       )
     }
 
-    const identity = uiStore.identity
     const events = leagueStore.flowEvents
 
     return (
       <div class="flow-page">
         <div class="page-meta">
           <span class="meta-main">Akış · son tahminler ve sonuçlar</span>
-          {identity ? <span class="meta-side">{identity.name} puanları Puan Durumu'nda</span> : null}
         </div>
 
         {events.length === 0 ? (
           <div class="empty big">
             <div class="empty-title">Henüz olay yok</div>
-            <div class="empty-sub">Tahminler girildikçe ve maçlar bitdikçe akış burada birikir.</div>
+            <div class="empty-sub">Tahminler girildikçe ve maçlar bittikçe akış burada birikir.</div>
           </div>
         ) : (
           <div class="flow-list">

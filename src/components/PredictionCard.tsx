@@ -1,15 +1,31 @@
 import Crest from './Crest'
 import CompBadge from './CompBadge'
 import uiStore from '../stores/ui-store'
-import { fmtFullDate } from '../utils/format'
+import leagueStore from '../stores/league-store'
+// DİKKAT: router UYGULAMANIN instance'ı (src/router.ts) — @geajs/core'un
+// global singleton'ı değil (URL değişir ama RouterView habersiz kalır).
+import { router } from '../router'
+import { fmtFullDate, dateKey } from '../utils/format'
 import { cn } from '../utils/cn'
 
-export default function PredictionCard({ match, identityId, own = true }: { match: any; identityId: string; own?: boolean }) {
+// Denetim turu (#31): kart tıklaması eskiden kaldırılmış uiStore.openSheet'i
+// çağırıyordu (TypeError). Artık maça GİT: günü seç + filtreleri sıfırla +
+// akordiyonu aç + Maçlar sayfasına dön.
+export default function PredictionCard({ match, identityId }: { match: any; identityId: string }) {
   const pred = identityId
     ? match.predictions.find((p: any) => p.playerId === identityId)
     : null
   return (
-    <button class="pred-card" click={() => uiStore.openSheet(match.id)}>
+    <button
+      class="pred-card"
+      title="Maçlar sayfasında göster"
+      click={() => {
+        uiStore.openMatch(match.id)
+        leagueStore.selectDay(dateKey(match.kickoff))
+        leagueStore.clearFilters()
+        router.push('/')
+      }}
+    >
       <div class="pred-card-head">
         <CompBadge code={match.competitionCode} size="sm" />
         <span class="pred-card-date">{fmtFullDate(match.kickoff)}</span>
@@ -27,7 +43,7 @@ export default function PredictionCard({ match, identityId, own = true }: { matc
         </div>
       </div>
       <div class="pred-card-foot">
-        <span class="pred-card-label">{own ? 'Tahminin' : 'Tahmini'}: <b>{pred?.label}</b></span>
+        <span class="pred-card-label">Tahmini: <b>{pred?.label}</b></span>
         {match.isFinished ? (
           <span class={cn('pred-points', pred?.correct ? 'hit' : 'miss')}>{pred?.points ?? 0} P</span>
         ) : (

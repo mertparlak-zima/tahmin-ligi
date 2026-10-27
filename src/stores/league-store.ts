@@ -180,15 +180,23 @@ class LeagueStore extends Store {
     this.selectedDate = future ? future.key : dates[dates.length - 1].key
   }
 
-  /** Akıllı polling aralığı (#16): canlı 30 sn; gece (01-08 İstanbul) ve maç
-   *  yokken 5 dk; aksi halde 2 dk. Sekme gizliyken istek atılmaz (mevcut davranış). */
-  private pollDelayMs(): number {
+  /** Temel aralık (#16): canlı 30 sn; gece (01-08 İstanbul) ve maç yokken
+   *  5 dk; aksi halde 2 dk. */
+  private baseDelayMs(): number {
     if (this.hasLive) return 30_000
     const hour = Number(
       new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: 'numeric', hour12: false }).format(new Date())
     )
     const quietNight = hour >= 1 && hour < 8
     return quietNight ? 300_000 : 120_000
+  }
+
+  /** Polling aralığı: temel aralık + hata geri çekilmesi. Denetim turu
+   *  (#31): üst üste hatalarda aralık katlanarak büyür (en çok 8x) — sunucu
+   *  hata verirken canlı 30 sn'lik pile dönüştürülmez. */
+  private pollDelayMs(): number {
+    const backoff = Math.min(2 ** Math.min(this.consecutiveFailures, 3), 8)
+    return this.baseDelayMs() * backoff
   }
 
   private schedulePoll() {
@@ -228,29 +236,56 @@ class LeagueStore extends Store {
     this.etag = ''
     this.archiveCache = {}
     this.monthSeasonCache = {}
+    // Denetim turu (#31): eski lig için havada olan arşiv/ay istekleri yeni
+    // ligin cache'ine yanlış anahtarla yazılmasın — seq'ler iptal eder;
+    // finally koşulu kaçıracağı için yüklemeleri de düşür (T3 review).
+    this.archiveSeq += 1
+    this.monthSeq += 1
+    this.archiveLoading = false
+    this.calendarLoading = false
     this.consecutiveFailures = 0
     this.hydratedFromCache = false
     this.data = null
     this.load()
   }
 
+  /** Denetim turu (#31): oyuncu kartındaki tahmin kartından maça giderken
+   *  filtreleri sıfırla — hedef maç seçili filtrenin arkasında kalmasın. */
+  clearFilters() {
+    this.statusFilter = 'all'
+    this.competitionFilter = 'all'
+  }
+
   /** "Geçmiş Sezonlar" seçimi (#18 PR2): sezon verisi ayrı çekilir ve önbelleklenir;
-   *  ana `data` (Maçlar/Geçmiş/Tahminlerim/MatchSheet) her zaman aktif sezon kalır. */
+   *  ana `data` (Maçlar/Geçmiş/Tahminlerim/MatchSheet) her zaman aktif sezon kalır.
+   *  Denetim turu (#31): seq yarış koruması — hızlı sezon değişiminde eski yanıt
+   *  yeni sezonun durumunu bozamaz; sezon 0'a dönüşte hata da temizlenir. */
+  private archiveSeq = 0
+
   async selectSeason(year: number) {
     this.selectedSeason = year
-    if (year === 0) return
+    // T3 review (#31): havada olan arşiv isteği bu seq artışıyla iptal
+    // edilir; finally koşulu kaçıracağı için loading'i BURADA düşür.
+    this.archiveSeq += 1
+    this.archiveLoading = false
+    if (year === 0) {
+      this.archiveError = null
+      return
+    }
     const cacheKey = `${this.league}:${year}`
     if (this.archiveCache[cacheKey]) return
+    const seq = this.archiveSeq
     this.archiveLoading = true
     this.archiveError = null
     try {
       const res = await fetch(`/api/league?season=${year}&league=${encodeURIComponent(this.league)}`, { cache: 'no-store' })
+      if (seq !== this.archiveSeq) return
       if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
       this.archiveCache[cacheKey] = await res.json()
     } catch (err: any) {
-      this.archiveError = err?.message ?? 'Sezon verisi alınamadı.'
+      if (seq === this.archiveSeq) this.archiveError = err?.message ?? 'Sezon verisi alınamadı.'
     } finally {
-      this.archiveLoading = false
+      if (seq === this.archiveSeq) this.archiveLoading = false
     }
   }
 
@@ -292,7 +327,11 @@ class LeagueStore extends Store {
     this.ensureMonthData()
   }
 
-  /** Seçili ayın sezonu aktif sezon değilse (ve veri yoksa) ?season= ile çek. */
+  /** Seçili ayın sezonu aktif sezon değilse (ve veri yoksa) ?season= ile çek.
+   *  Denetim turu (#31): seq yarış koruması — hızlı ay gezinmede ilk biten
+   *  istek yüklemeyi erken düşürmüyordu (eski ızgara parlaması). */
+  private monthSeq = 0
+
   private ensureMonthData() {
     const parsed = parseMonthKey(this.calendarMonthKey)
     if (!parsed) return
@@ -301,19 +340,27 @@ class LeagueStore extends Store {
     if (activeSeason == null || season === activeSeason) return
     const cacheKey = `${this.league}:${season}`
     if (this.monthSeasonCache[cacheKey]) return
+    const seq = ++this.monthSeq
     this.calendarLoading = true
     this.calendarError = null
     fetch(`/api/league?season=${season}&league=${encodeURIComponent(this.league)}`, { cache: 'no-store' })
       .then(async res => {
+        if (seq !== this.monthSeq) return
         if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
         this.monthSeasonCache[cacheKey] = await res.json()
       })
       .catch((err: any) => {
-        this.calendarError = err?.message ?? 'Sezon verisi alınamadı.'
+        if (seq === this.monthSeq) this.calendarError = err?.message ?? 'Sezon verisi alınamadı.'
       })
       .finally(() => {
-        this.calendarLoading = false
+        if (seq === this.monthSeq) this.calendarLoading = false
       })
+  }
+
+  /** Denetim turu (#31): takvim sezon verisi hatasında "Tekrar dene". */
+  retryCalendar() {
+    this.calendarError = null
+    this.ensureMonthData()
   }
 
   /** Ayın veri kaynağı: aktif sezon payload'ı ya da çekilmiş sezon payload'ı. */
@@ -421,7 +468,9 @@ class LeagueStore extends Store {
   }
 
   onVisibilityGained() {
-    if (Date.now() - this.lastLoadedAt > this.pollDelayMs() / 2) this.load(true)
+    // T3 review (#31): görünürlük eşiği TEMEL aralığa bağlıdır — hata geri
+    // çekilmesi dönen kullanıcıyı tazelemeden yoksun bırakmasın.
+    if (Date.now() - this.lastLoadedAt > this.baseDelayMs() / 2) this.load(true)
   }
 
   // --- Hesaplanmış görünüm verileri ---
@@ -506,7 +555,9 @@ class LeagueStore extends Store {
   get matchWeekByMatchId(): Record<string, number> {
     const data = this.data
     if (this.matchWeekCache?.data === data) return this.matchWeekCache.out
-    const dayOf = (iso: string) => Math.floor(Date.parse(iso) / 86400000)
+    // Denetim turu (#31): gün sayısı İSTANBUL gününden türetilir (dateKey) —
+    // UTC günüyle çalışınca gece yarısına komşu kickoff'lar yanlış kümeleniyordu.
+    const dayOf = (iso: string) => Math.floor(Date.parse(`${dateKey(iso)}T12:00:00Z`) / 86400000)
     const clusters: Array<{ lastDay: number; teams: Set<string>; items: any[] }> = []
     const matches = [...(data?.matches ?? [])].sort(
       (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),

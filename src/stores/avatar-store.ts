@@ -31,6 +31,8 @@ class AvatarStore extends Store {
   zoom = 1
   saving = false
   error: string | null = null
+  /** Denetim turu (#31): "Kaldır" sürerken düğme kilitli (çift tık koruması). */
+  removingPlayerId = ''
 
   openEditor(player: any) {
     if (!player) return
@@ -118,6 +120,8 @@ class AvatarStore extends Store {
   }
 
   async remove(playerId: string) {
+    if (this.removingPlayerId) return
+    this.removingPlayerId = playerId
     try {
       await api('/api/players/avatar', {
         method: 'DELETE',
@@ -126,7 +130,12 @@ class AvatarStore extends Store {
       uiStore.toast('Profil fotoğrafı kaldırıldı.')
       leagueStore.load(true)
     } catch (err: any) {
-      uiStore.toast(err?.message ?? 'Profil fotoğrafı kaldırılamadı.')
+      const msg = /failed to fetch|networkerror|load failed|fetch failed/i.test(String(err?.message))
+        ? 'Bağlantı hatası — tekrar dene.'
+        : (err?.message ?? 'Profil fotoğrafı kaldırılamadı.')
+      uiStore.toast(msg, 5200)
+    } finally {
+      this.removingPlayerId = ''
     }
   }
 }

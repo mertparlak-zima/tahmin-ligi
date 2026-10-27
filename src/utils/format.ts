@@ -13,6 +13,16 @@ const fullFmt = new Intl.DateTimeFormat('tr-TR', {
   month: 'long',
   weekday: 'long',
 })
+// Denetim turu (#31): arşiv sezonu tarihlerinde yıl da yazılır ("14 Mart 2025
+// Cumartesi") — yıl olmadan sezonlar birbirine karışıyor.
+const fullFmtWithYear = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: TZ,
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  weekday: 'long',
+})
+const yearFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric' })
 
 /** YYYY-AA-GG (İstanbul). */
 export function dateKey(iso: string): string {
@@ -40,9 +50,11 @@ export function fmtMonth(key: string): string {
   return monthFmt.format(new Date(`${key}T12:00:00Z`)).toLocaleLowerCase('tr-TR')
 }
 
-/** "24 Ekim Cumartesi" */
+/** "24 Ekim Cumartesi" — geçmiş/yıl dışı tarihlerde "14 Mart 2025 Cumartesi". */
 export function fmtFullDate(iso: string): string {
-  return fullFmt.format(new Date(iso))
+  const d = new Date(iso)
+  const sameYear = yearFmt.format(d) === yearFmt.format(new Date())
+  return (sameYear ? fullFmt : fullFmtWithYear).format(d)
 }
 
 /** Date key için göreli gün etiketi: Bugün / Dün / tam tarih. */

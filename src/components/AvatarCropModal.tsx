@@ -120,6 +120,16 @@ export default class AvatarCropModal extends Component {
                   pointerdown={(e: any) => {
                     this.dragging = true
                     this.dragFrom = { x: e.clientX, y: e.clientY, panX: this.panX, panY: this.panY }
+                    // Denetim turu (#31): bırakma sahnenin DIŞINDA olursa
+                    // sürükleme takılı kalıyordu — pointerup/pointercancel
+                    // pencereye bağlanır; handler kendi kendini temizler.
+                    const endDrag = () => {
+                      this.dragging = false
+                      window.removeEventListener('pointerup', endDrag)
+                      window.removeEventListener('pointercancel', endDrag)
+                    }
+                    window.addEventListener('pointerup', endDrag)
+                    window.addEventListener('pointercancel', endDrag)
                   }}
                   pointermove={(e: any) => {
                     if (!this.dragging) return

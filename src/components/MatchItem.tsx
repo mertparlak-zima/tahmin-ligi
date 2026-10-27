@@ -34,17 +34,20 @@ import { cn } from '../utils/cn'
  *  predictionsStore taslaklarından okunur (mühür nedeniyle mevcut değer
  *  bilinemez — bkv. predictions-store başlık notu). */
 class EntryRow extends Component {
-  template({ player, match, hasPick }: any) {
+  template({ player, match }: any) {
     const matchId = match.id
     const key = `${player.id}:${matchId}`
     const draft = predictionsStore.drafts[key] ?? ''
     const dirty = predictionsStore.isDirty(matchId, player.id)
+    // Denetim turu (#31, kural 9): "girdi" rozeti PARENT map gövdesinde değil
+    // burada — kendi prop'undan okur, bayat kapanış riski yok.
+    const hasPick = match.predictions.some((p: any) => p.playerId === player.id)
     // Kısa etiket (#24 kullanıcı isteği): "FB kazanacak" tarzı — TLA varsa
     // onu ('FEN'), yoksa kısa ad (uzun adlar CSS'te kırpılır).
     const homeTag = match.home.tla ?? match.home.short
     const awayTag = match.away.tla ?? match.away.short
     return (
-      <div class={cn('entry-row', dirty && 'dirty', uiStore.identityId === player.id && 'me')}>
+      <div class={cn('entry-row', dirty && 'dirty')}>
         <Avatar
           color={player.color}
           initials={player.initials}
@@ -129,7 +132,6 @@ class EntryForm extends Component {
               key={player.id}
               player={player}
               match={match}
-              hasPick={match.predictions.some((p: any) => p.playerId === player.id)}
             />
           ))}
           {leagueStore.players.length === 0 ? (
@@ -189,7 +191,12 @@ export default class MatchItem extends Component {
   template({ match }: any) {
     // Giriş formu koşulu: henüz başlamamış + bitmemiş + ertelenmemiş maç.
     // (ui-store missingMatches ile aynı durum tanımı.)
-    const isEntry = !match.isStarted && !match.isFinished && match.statusGroup !== 'inactive'
+    // Denetim turu (#31): kickoff İSTEMCİ taraftan da kontrol edilir — iki
+    // poll arasında maç başlarsa form açık kalıyor ve ancak kayıtta 409
+    // yiyordu. Şimdi kickoff geçince form kapanır (bir poll gecikmesi
+    // olabilir; API 409 otorite olarak kalır, bu yalnız UX katmanı).
+    const kickoffPassed = Date.parse(match.kickoff) <= Date.now()
+    const isEntry = !kickoffPassed && !match.isStarted && !match.isFinished && match.statusGroup !== 'inactive'
     return (
       <div class="match-item">
         <MatchRow match={match} onToggle={() => uiStore.toggleMatchAccordion(match.id)} />
@@ -213,6 +220,8 @@ export default class MatchItem extends Component {
             ) : null}
             {isEntry ? (
               <EntryForm match={match} />
+            ) : kickoffPassed && !match.isStarted && !match.isFinished && match.statusGroup !== 'inactive' ? (
+              <div class="match-acc-empty">Maç başladı — tahmin girişi kilitlendi. Veriler tazelenince tahminler açılır.</div>
             ) : match.predictions.length === 0 ? (
               <div class="match-acc-empty">Bu maça tahmin girilmemiş.</div>
             ) : match.predictionsVisible ? (

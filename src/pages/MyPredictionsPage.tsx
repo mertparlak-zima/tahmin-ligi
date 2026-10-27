@@ -8,6 +8,7 @@ import { Component } from '@geajs/core'
 import leagueStore from '../stores/league-store'
 import uiStore from '../stores/ui-store'
 import avatarStore from '../stores/avatar-store'
+import predictionsStore from '../stores/predictions-store'
 import Avatar from '../components/Avatar'
 import FormChips from '../components/FormChips'
 import PredictionCard from '../components/PredictionCard'
@@ -22,14 +23,13 @@ class PlayerCard extends Component {
   template({ player, stats }: any) {
     return (
       <button
-        class={cn('player-card', uiStore.identityId === player.id && 'me')}
+        class="player-card"
         click={() => {
           leagueStore.selectPlayer(player.id)
         }}
       >
         <span class="player-card-top">
           <Avatar color={player.color} initials={player.initials} size="lg" photo={player.avatarUrl ?? null} />
-          {uiStore.identityId === player.id ? <span class="you-tag">SEN</span> : null}
         </span>
         <span class="player-card-name">{player.name}</span>
         <span class="player-card-stats">
@@ -65,6 +65,22 @@ class MissingRow extends Component {
   }
 }
 
+// Denetim turu (#31): düzenleme formunun renk çipi (MatchItem ColorChip
+// deseninin kopyası — keyed map öğesi bileşen olmalı, kural 6).
+class EditColorChip extends Component {
+  template({ color, selected, onSelect }: any) {
+    return (
+      <button
+        class={cn('entry-color-chip', selected && 'on')}
+        style={{ background: color } as any}
+        aria-label={`Renk ${color}`}
+        aria-pressed={selected ? 'true' : 'false'}
+        click={onSelect}
+      ></button>
+    )
+  }
+}
+
 // Detay görünümü child component'i (#20 U8): playerId prop'u JSX BINDING'inden
 // gelir (doğrudan store okuması → taze); hesaplamalar kendi prop'undan yapar
 // (kural 9 deseni — body const'ları bayat kalıyordu, view anahtarı bu yüzden
@@ -77,9 +93,17 @@ class PlayerDetail extends Component {
     const sealed = uiStore.sealedCountOf(playerId)
     const missing = uiStore.missingMatches(playerId)
     const wrong = player ? player.played - player.correctOutcomes : 0
+    const avatarRemoving = avatarStore.removingPlayerId === playerId
     return (
       <div>
-        <button class="players-back" click={() => leagueStore.closePlayerDetail()}>‹ Oyuncular</button>
+        <button
+          class="players-back"
+          click={() => {
+            // T3 review (#31): panele dönüşte düzenleme formu açık kalmasın.
+            predictionsStore.closeEdit()
+            leagueStore.closePlayerDetail()
+          }}
+        >‹ Oyuncular</button>
         <div class="identity-hero">
           <Avatar color={pRow?.color ?? '#b8f34a'} initials={pRow?.initials ?? '?'} size="xl" photo={pRow?.avatarUrl ?? null} />
           <div class="identity-hero-text">
@@ -87,24 +111,56 @@ class PlayerDetail extends Component {
             <span class="identity-sub">
               {player ? `${player.rank}. sırada · ${player.played} maçta tahmin` : 'Henüz sıralaması yok'}
             </span>
-            {/* #24 Faz 2: avatar yükle/değiştir/kaldır — eski admin Oyuncular
-                sekmesinden buraya taşındı (kırpma modalı avatar-store'a bağlı). */}
+            {/* #24 Faz 2: avatar yükle/değiştir/kaldır. #31: oyuncu
+                düzenleme (PATCH) ilk kez UI'a bağlandı; SİLME kullanıcı
+                talebiyle UI'da YOK (API ucu kalır). */}
             {pRow ? (
               <span class="avatar-actions">
                 <button class="btn ghost sm" click={() => avatarStore.openEditor(pRow)}>
                   {pRow.avatarUrl ? 'Fotoğrafı değiştir' : 'Fotoğraf yükle'}
                 </button>
                 {pRow.avatarUrl ? (
-                  <button class="btn ghost sm" click={() => avatarStore.remove(pRow.id)}>Kaldır</button>
+                  <button class="btn ghost sm" disabled={avatarRemoving} click={() => avatarStore.remove(pRow.id)}>
+                    {avatarRemoving ? 'Kaldırılıyor…' : 'Kaldır'}
+                  </button>
                 ) : null}
+                <button class="btn ghost sm" click={() => predictionsStore.openEdit(pRow)}>Düzenle</button>
               </span>
             ) : null}
           </div>
-          {uiStore.identityId === playerId ? (
-            <span class="you-tag">SEN</span>
-          ) : null}
         </div>
         <AvatarCropModal />
+
+        {/* Düzenleme paneli — .open CSS deseni (kural 4). */}
+        <div class={cn('entry-player-form player-edit-form', predictionsStore.editOpen && 'open')}>
+          <input
+            class="input"
+            type="text"
+            placeholder="Oyuncu adı"
+            maxlength="40"
+            aria-label="Oyuncu adı"
+            value={predictionsStore.editForm.name}
+            input={e => predictionsStore.setEditName((e.target as HTMLInputElement).value)}
+          />
+          <span class="entry-colors" role="group" aria-label="Oyuncu rengi">
+            {predictionsStore.palette.map(chip => (
+              <EditColorChip
+                key={chip}
+                color={chip}
+                selected={predictionsStore.editForm.color === chip}
+                onSelect={() => predictionsStore.setEditColor(chip)}
+              />
+            ))}
+          </span>
+          <button class="btn ghost sm" click={() => predictionsStore.closeEdit()}>Vazgeç</button>
+          <button
+            class="btn primary sm"
+            disabled={predictionsStore.editSaving || predictionsStore.editForm.name.trim().length < 2}
+            click={() => predictionsStore.saveEdit()}
+          >
+            {predictionsStore.editSaving ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
 
         <div class="stat-cards">
           <div class="stat-card">
@@ -137,7 +193,7 @@ class PlayerDetail extends Component {
         ) : (
           <div class="pred-cards">
             {uiStore.playerMatches(playerId).map(match => (
-              <PredictionCard key={match.id} match={match} identityId={playerId} own={uiStore.identityId === playerId} />
+              <PredictionCard key={match.id} match={match} identityId={playerId} />
             ))}
           </div>
         )}

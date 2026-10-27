@@ -21,6 +21,7 @@ export default class DatePreviewPopover extends Component {
     const below = (uiStore.datePreviewRect?.top ?? 999) < 220
     return (
       <div
+        id="date-preview-popover"
         class={`date-preview-popover${open ? ' open' : ''}${below ? ' below' : ''}`}
         aria-hidden="true"
       >
