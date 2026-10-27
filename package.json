@@ -9,6 +9,7 @@
     "demo": "npm run build && node scripts/demo-server.mjs",
     "dev:db": "node --env-file=.env scripts/dev-server.mjs",
     "check:db": "node --env-file=.env scripts/check-supabase.mjs",
+    "notify:dry": "node --env-file=.env scripts/notify-dry.mjs",
     "test:server": "node scripts/tests/server.test.mjs",
     "build": "vite build",
     "preview": "vite preview"

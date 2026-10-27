@@ -259,6 +259,8 @@ export function createMemorySupabase(seed = {}, opts = {}) {
     players: clone(seed.players ?? []),
     matches: clone(seed.matches ?? []),
     predictions: clone(seed.predictions ?? []),
+    // #29 gece özeti: gönderilen maç flag'leri.
+    match_notifications: clone(seed.match_notifications ?? []),
     app_config: clone(seed.app_config ?? [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
     ]),

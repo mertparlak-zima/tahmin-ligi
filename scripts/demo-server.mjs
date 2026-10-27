@@ -17,6 +17,7 @@ import { maybeSync } from '../lib/sync.js'
 import { buildLeaguePayload } from '../lib/league.js'
 import { seasonYear } from '../lib/espn.js'
 import { GET as leagueGET } from '../api/league.js'
+import { GET as notifyGET } from '../api/notify.js'
 import { savePredictions } from '../api/predictions.js'
 import { createPlayer, updatePlayer, deletePlayer } from '../api/players.js'
 import { uploadAvatar, deleteAvatar } from '../api/players/avatar.js'
@@ -175,6 +176,8 @@ function createMemorySupabase() {
     ],
     matches: [],
     predictions: [],
+    // #29: gönderilen maç özetlerinin flag'i (gece özeti ucu).
+    match_notifications: [],
     app_config: [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
     ],
@@ -351,6 +354,24 @@ async function handleApi(request) {
     return new Response(JSON.stringify(payload), {
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     })
+  }
+
+  // #29: gece özeti ucu — demo deposu enjekte edilir (CRON_SECRET'siz serbest).
+  // DISCORD_WEBHOOK_URL yoksa uç otomatik dry-run'a düşer (önizleme döner).
+  if (method === 'GET' && pathname === '/api/notify') {
+    const started = Date.now()
+    syncing = (syncing ?? Promise.resolve())
+      .then(() => maybeSync(supabase))
+      .catch(() => {})
+    await syncing
+    const webReq = new Request(`http://localhost:${PORT}${request.url}`, {
+      method: 'GET',
+      headers: request.headers,
+    })
+    webReq.supabase = supabase
+    const res = await notifyGET(webReq)
+    console.log(`GET /api/notify → ${res.status} (${Date.now() - started} ms)`)
+    return res
   }
 
   const webReq = toWebRequest(request, await readBody(request).catch(() => ({})))
