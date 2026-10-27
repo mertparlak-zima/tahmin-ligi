@@ -170,10 +170,8 @@ export async function deleteAvatar(supabase, request) {
     .maybeSingle()
   if (!player) return json(404, { error: 'Oyuncu bulunamadı.' })
 
-  // storage'dan mevcut dosyayı sil (hatası yutulur), sonra kolonu boşalt
-  const path = avatarPathOf(player.avatar_url, playerId)
-  if (path) await removeStorageQuietly(supabase, path)
-
+  // Denetim turu (#31): ÖNCE kolon boşaltılır (DB gerçeği), SONRA dosya
+  // silinir — eski sıra update patlarsa "dosya yok, URL duruyor" bırakıyordu.
   const { data: updated, error } = await supabase
     .from('players')
     .update({ avatar_url: null })
@@ -185,6 +183,11 @@ export async function deleteAvatar(supabase, request) {
     return json(500, { error: 'Avatar silinemedi.' })
   }
   if (!updated) return json(404, { error: 'Oyuncu bulunamadı.' })
+
+  // storage'dan dosyayı temizle (hatası ana işlemi bozmaz)
+  const path = avatarPathOf(player.avatar_url, playerId)
+  if (path) await removeStorageQuietly(supabase, path)
+
   return json(200, { ok: true, player: { ...updated, initials: initialsOf(updated.name) } })
 }
 

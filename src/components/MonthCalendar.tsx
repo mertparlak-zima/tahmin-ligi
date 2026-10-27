@@ -10,17 +10,11 @@ import leagueStore from '../stores/league-store'
 import CalWeekRow from './CalWeekRow'
 import CalWeekday from './CalWeekday'
 import { WEEKDAY_HEADERS, monthTitle } from '../utils/calendar.js'
-import { todayKey } from '../utils/format'
+import { todayKey, shiftDay } from '../utils/format'
 
 const dayLabel = key => {
   const d = new Date(`${key}T12:00:00`)
   return new Intl.DateTimeFormat('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }).format(d)
-}
-
-const shiftDayKey = (key, delta) => {
-  const d = new Date(`${key}T12:00:00`)
-  d.setDate(d.getDate() + delta)
-  return d.toISOString().slice(0, 10)
 }
 
 export default class MonthCalendar extends Component {
@@ -74,12 +68,15 @@ export default class MonthCalendar extends Component {
               </div>
             )}
             {leagueStore.calendarError ? (
-              <div class="cal-error">{leagueStore.calendarError}</div>
+              <div class="cal-error">
+                <span>{leagueStore.calendarError}</span>
+                <button class="cal-retry" click={() => leagueStore.retryCalendar()}>Tekrar dene</button>
+              </div>
             ) : null}
           </div>
         ) : (
           <div class="cal-compact">
-            <button class="cal-nav" aria-label="Önceki gün" click={() => leagueStore.selectDay(shiftDayKey(selectedKey, -1))}>‹</button>
+            <button class="cal-nav" aria-label="Önceki gün" click={() => leagueStore.selectDay(shiftDay(selectedKey, -1))}>‹</button>
             <button class="cal-compact-label" click={() => this.toggleExpanded()} aria-label="Takvimi aç">
               <span class="cal-compact-date">
                 {selectedKey === todayKey() ? 'Bugün' : dayLabel(selectedKey)}
@@ -89,7 +86,7 @@ export default class MonthCalendar extends Component {
               </span>
               <span class="cal-compact-chevron" aria-hidden="true"></span>
             </button>
-            <button class="cal-nav" aria-label="Sonraki gün" click={() => leagueStore.selectDay(shiftDayKey(selectedKey, 1))}>›</button>
+            <button class="cal-nav" aria-label="Sonraki gün" click={() => leagueStore.selectDay(shiftDay(selectedKey, 1))}>›</button>
           </div>
         )}
       </div>

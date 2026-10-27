@@ -2,15 +2,14 @@ import leagueStore from '../stores/league-store'
 import Avatar from './Avatar'
 import { cn } from '../utils/cn'
 
-export default function StandingsRow({ row, isOwn }: { row: any; isOwn: boolean }) {
+export default function StandingsRow({ row }: { row: any }) {
   return (
-    <tr class={isOwn ? 'own-row' : ''}>
+    <tr>
       <td class={cn('col-rank', row.rank <= 3 && 'top')}>{row.rank}</td>
       <td class="col-player">
         <span class="cell-player">
           <Avatar color={row.color} initials={row.initials} size="sm" photo={row.avatarUrl ?? null} />
           <span>{row.name}</span>
-          {isOwn ? <span class="you-tag">SEN</span> : null}
         </span>
       </td>
       <td class="col-num">{row.played}</td>
