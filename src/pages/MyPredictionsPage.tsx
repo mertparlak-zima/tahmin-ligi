@@ -99,9 +99,8 @@ class PlayerDetail extends Component {
         <button
           class="players-back"
           click={() => {
-            // T3 review (#31): panele dönüşte düzenle/sil formları açık kalmasın.
+            // T3 review (#31): panele dönüşte düzenleme formu açık kalmasın.
             predictionsStore.closeEdit()
-            predictionsStore.cancelDeletePlayer()
             leagueStore.closePlayerDetail()
           }}
         >‹ Oyuncular</button>
@@ -113,7 +112,8 @@ class PlayerDetail extends Component {
               {player ? `${player.rank}. sırada · ${player.played} maçta tahmin` : 'Henüz sıralaması yok'}
             </span>
             {/* #24 Faz 2: avatar yükle/değiştir/kaldır. #31: oyuncu
-                düzenle/sil (PATCH/DELETE uçları ilk kez UI'a bağlandı). */}
+                düzenleme (PATCH) ilk kez UI'a bağlandı; SİLME kullanıcı
+                talebiyle UI'da YOK (API ucu kalır). */}
             {pRow ? (
               <span class="avatar-actions">
                 <button class="btn ghost sm" click={() => avatarStore.openEditor(pRow)}>
@@ -125,7 +125,6 @@ class PlayerDetail extends Component {
                   </button>
                 ) : null}
                 <button class="btn ghost sm" click={() => predictionsStore.openEdit(pRow)}>Düzenle</button>
-                <button class="btn ghost sm danger" click={() => predictionsStore.askDeletePlayer(pRow)}>Sil</button>
               </span>
             ) : null}
           </div>
@@ -160,22 +159,6 @@ class PlayerDetail extends Component {
             click={() => predictionsStore.saveEdit()}
           >
             {predictionsStore.editSaving ? 'Kaydediliyor…' : 'Kaydet'}
-          </button>
-        </div>
-
-        {/* Sil onayı — .open CSS deseni; tahminli oyuncuda API 409 mesajı
-            toast'ta aynen görünür. */}
-        <div class={cn('player-delete-confirm', predictionsStore.deleteConfirmOpen && 'open')}>
-          <span class="player-delete-text">
-            <b>{pRow?.name ?? 'Oyuncu'}</b> kalıcı olarak silinsin mi? Tahmini olan oyuncu silinemez.
-          </span>
-          <button class="btn ghost sm" disabled={predictionsStore.deleteSaving} click={() => predictionsStore.cancelDeletePlayer()}>Vazgeç</button>
-          <button
-            class="btn primary sm danger"
-            disabled={predictionsStore.deleteSaving}
-            click={() => predictionsStore.confirmDeletePlayer()}
-          >
-            {predictionsStore.deleteSaving ? 'Siliniyor…' : 'Evet, sil'}
           </button>
         </div>
 

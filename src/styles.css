@@ -1771,32 +1771,9 @@ body.league-tsl .brand-mark {
   margin-top: 6px;
 }
 
-/* Denetim turu (#31): oyuncu düzenleme formu (hero altında) + sil onayı. */
+/* Denetim turu (#31): oyuncu düzenleme formu (hero altında). */
 .player-edit-form {
   margin-top: 10px;
-}
-
-.player-delete-confirm {
-  display: none;
-}
-
-.player-delete-confirm.open {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 93, 112, 0.35);
-  background: rgba(255, 93, 112, 0.07);
-}
-
-.player-delete-text {
-  flex: 1;
-  min-width: 200px;
-  font-size: 13.5px;
-  color: var(--text);
 }
 
 /* Denetim turu (#31): .you-tag ölü ("SEN" rozeti kimlikle gitti). */
@@ -2407,27 +2384,6 @@ body.league-tsl .brand-mark {
 
 .btn.ghost:hover {
   color: var(--text);
-}
-
-/* Denetim turu (#31): yıkıcı eylem vurgusu (oyuncu sil). */
-.btn.danger {
-  color: #ff8a97;
-  border-color: rgba(255, 93, 112, 0.4);
-}
-
-.btn.danger:hover {
-  color: #ffb3bd;
-  border-color: rgba(255, 93, 112, 0.7);
-}
-
-.btn.primary.danger {
-  background: var(--live);
-  border-color: var(--live);
-  color: #fff;
-}
-
-.btn.primary.danger:hover {
-  background: #ff7686;
 }
 
 .btn.sm {

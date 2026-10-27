@@ -58,14 +58,12 @@ class PredictionsStore extends Store {
   playerForm = { name: '', color: PLAYER_COLORS[0] }
   playerSaving = false
 
-  /** Denetim turu (#31): oyuncu düzenle (PATCH) ve sil (DELETE) formları —
-   *  uçlar hep vardı ama UI hiç bağlanmamıştı (typo'lu oyuncu kalıcıydı). */
+  /** Denetim turu (#31): oyuncu düzenleme formu (PATCH /api/players) — uç
+   *  vardı ama UI'a hiç bağlanmamıştı (typo'lu oyuncu kalıcıydı).
+   *  Not: SİLME kullanıcı talebiyle UI'da YOK (API ucu kalır). */
   editOpen = false
   editForm = { id: '', name: '', color: PLAYER_COLORS[0] }
   editSaving = false
-  deleteConfirmOpen = false
-  deleteTargetId = ''
-  deleteSaving = false
 
   get palette(): string[] {
     return PLAYER_COLORS
@@ -230,7 +228,6 @@ class PredictionsStore extends Store {
   openEdit(player: any) {
     if (!player) return
     this.editForm = { id: player.id, name: player.name, color: player.color ?? PLAYER_COLORS[0] }
-    this.deleteConfirmOpen = false
     this.editOpen = true
   }
 
@@ -266,50 +263,6 @@ class PredictionsStore extends Store {
       uiStore.toast(friendlyError(err), 5200)
     } finally {
       this.editSaving = false
-    }
-  }
-
-  /** Sil onayı: ikinci adım panel (.open deseni). */
-  askDeletePlayer(player: any) {
-    if (!player) return
-    this.deleteTargetId = player.id
-    this.editOpen = false
-    this.deleteConfirmOpen = true
-  }
-
-  cancelDeletePlayer() {
-    this.deleteConfirmOpen = false
-    this.deleteTargetId = ''
-  }
-
-  /** DELETE /api/players — tahminli oyuncu API'den 409 ile döner (mesajı
-   *  aynen gösterilir: "N tahmini var; önce tahminleri silin"). Başarıda
-   *  silinen oyuncunun taslak/kirli anahtarları da düşürülür (T3 review:
-   *  hayalet "Kaydet (N)" sayacı kalıyordu). */
-  async confirmDeletePlayer() {
-    if (!this.deleteTargetId) return
-    this.deleteSaving = true
-    try {
-      await api('/api/players', {
-        method: 'DELETE',
-        body: JSON.stringify({ id: this.deleteTargetId }),
-      })
-      const prefix = `${this.deleteTargetId}:`
-      const drafts = { ...this.drafts }
-      for (const key of Object.keys(drafts)) {
-        if (key.startsWith(prefix)) delete drafts[key]
-      }
-      this.drafts = drafts
-      this.clearDirtyKeys(Object.keys(this.dirty).filter(key => key.startsWith(prefix)))
-      this.deleteConfirmOpen = false
-      this.deleteTargetId = ''
-      leagueStore.closePlayerDetail()
-      uiStore.toast('Oyuncu silindi.')
-      leagueStore.load(true)
-    } catch (err: any) {
-      uiStore.toast(friendlyError(err), 5200)
-    } finally {
-      this.deleteSaving = false
     }
   }
 }
