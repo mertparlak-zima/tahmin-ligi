@@ -17,6 +17,9 @@
   --accent-hi: #ccff68;
   --ink: #0c1a04;
   --live: #ff5d70;
+  /* #24 turu: CANLI göstergeleri yeşil + nabız (kullanıcı isteği); --live
+     kırmızısı yalnız yanlış/mağlubiyet ve uyarı göstergelerinde kalır. */
+  --live-green: #3ddc84;
   --gold: #ffd05c;
   --blue: #6db6ff;
   --mint: #39dfb2;
@@ -133,13 +136,14 @@ body::after {
 }
 
 body.league-eu::before {
-  opacity: 0.07;
+  /* Tur 3: kullanıcı isteği — zemin logosu bir iki tık daha belirgin. */
+  opacity: 0.095;
 }
 
 body.league-tsl::after {
   /* TSL wordmark koyu-yoğun → EU starball'ından bir tık daha soluk.
-     Tur 2: kırmızı göz yormasın diye bir tık daha indirildi. */
-  opacity: 0.04;
+     Tur 3: bir tık daha belirgin (0.04 → 0.06). */
+  opacity: 0.06;
 }
 
 /* Tüm uygulama içeriği soluk logonun ÜSTÜNDE. .app-root pozitif
@@ -374,25 +378,27 @@ body.league-tsl .brand-mark {
   gap: 7px;
   padding: 5px 13px;
   border-radius: 999px;
-  background: rgba(255, 93, 112, 0.14);
-  color: var(--live);
+  /* #24 turu: canlı göstergesi yeşil (kullanıcı isteği). */
+  background: rgba(61, 220, 132, 0.13);
+  color: var(--live-green);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  border: 1px solid rgba(255, 93, 112, 0.35);
+  border: 1px solid rgba(61, 220, 132, 0.35);
 }
 
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--live);
+  background: var(--live-green);
   animation: pulse 1.6s ease infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 93, 112, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(255, 93, 112, 0); }
+  /* currentColor: yeşil canlı noktası yeşil hale üretir (#24 turu). */
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
 }
 
 .icon-btn {
@@ -460,12 +466,12 @@ body.league-tsl .brand-mark {
 .nav-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
+  gap: 9px;
+  padding: 11px 18px;
   border-radius: 999px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 750;
   border: 1px solid transparent;
   transition: background 0.15s, color 0.15s;
 }
@@ -604,7 +610,7 @@ body.league-tsl .brand-mark {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--live);
+  background: var(--live-green);
   animation: pulse 1.6s ease infinite;
 }
 
@@ -900,13 +906,13 @@ body.league-tsl .brand-mark {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--live);
+  background: var(--live-green);
   animation: pulse 1.6s ease infinite;
   z-index: 2;
 }
 
 .cal-cell.has-live {
-  border-color: rgba(255, 93, 112, 0.4);
+  border-color: rgba(61, 220, 132, 0.4);
 }
 
 .cal-chip {
@@ -932,9 +938,9 @@ body.league-tsl .brand-mark {
 
 .cal-chip[data-tone='upcoming'] { color: var(--text); }
 .cal-chip[data-tone='live'] {
-  background: rgba(255, 93, 112, 0.24);
-  border-left-color: var(--live);
-  color: #ffb3bd;
+  background: rgba(61, 220, 132, 0.2);
+  border-left-color: var(--live-green);
+  color: #b8f5d2;
 }
 .cal-chip[data-tone='finished'] { color: var(--muted); }
 .cal-chip[data-tone='inactive'] { opacity: 0.55; }
@@ -1061,7 +1067,7 @@ body.league-tsl .brand-mark {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--live);
+  background: var(--live-green);
 }
 
 .comp-select {
@@ -1149,7 +1155,9 @@ body.league-tsl .brand-mark {
 }
 
 .slot.live .slot-main {
-  color: var(--live);
+  /* #24 turu: canlı dakika YEŞİL + nabız (kullanıcı isteği). */
+  color: var(--live-green);
+  animation: pulse 1.5s ease infinite;
 }
 
 .slot-sub {
@@ -1160,7 +1168,8 @@ body.league-tsl .brand-mark {
 }
 
 .slot.live .slot-sub {
-  color: var(--live);
+  color: var(--live-green);
+  animation: pulse 1.5s ease infinite;
 }
 
 .slot.inactive .slot-main {
@@ -1201,7 +1210,8 @@ body.league-tsl .brand-mark {
 }
 
 .team-score {
-  margin-left: auto;
+  /* #24 turu: skor en sağda değil, takım adının YANINDA (kullanıcı isteği). */
+  margin-left: 2px;
   font-size: 19px;
   font-weight: 850;
 }
@@ -1410,16 +1420,17 @@ body.league-tsl .brand-mark {
 
 .form-chips {
   display: inline-flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .form-chip {
-  width: 18px;
-  height: 18px;
+  /* #24 turu: "son 5" kartları küçüktü okunmuyordu — büyütüldü. */
+  width: 23px;
+  height: 23px;
   display: grid;
   place-items: center;
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -2752,6 +2763,15 @@ body.league-tsl .brand-mark {
   border-radius: 10px;
   background: var(--surface-2);
   border: 1px solid var(--line);
+  /* Tur 3 (kullanıcı raporu): "kazanacak" etiketleri sığmıyordu — segment
+     satır geneline yayılır (dar ekranda kendi satırına sarar). */
+  flex: 1 1 175px;
+}
+
+/* Segment içi düğmeler genişliği paylaşır; takım düğmelerinde üst sınır yok. */
+.entry-seg > .entry-seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .entry-seg-btn {
@@ -2766,12 +2786,12 @@ body.league-tsl .brand-mark {
 }
 
 /* #24: takım logolu giriş düğmeleri — "FEN kazanacak" tarzı etiket + crest;
-   dar ekranda etiket kırpılır (ellipsis), logo hep görünür. */
+   segment satır geneline yayıldığından üst sınır kalkar, uzun adlar kırpılır. */
 .entry-seg-btn.team {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: 128px;
+  max-width: none;
 }
 
 .entry-seg-btn.draw {

@@ -87,7 +87,7 @@ export default class MonthCalendar extends Component {
               <span class="cal-compact-count">
                 {selectedCount > 0 ? `${selectedCount} maç` : 'maç yok'}
               </span>
-              <span class="cal-compact-chevron" aria-hidden="true">⌄</span>
+              <span class="cal-compact-chevron" aria-hidden="true"></span>
             </button>
             <button class="cal-nav" aria-label="Sonraki gün" click={() => leagueStore.selectDay(shiftDayKey(selectedKey, 1))}>›</button>
           </div>

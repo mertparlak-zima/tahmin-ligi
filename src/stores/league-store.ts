@@ -103,6 +103,10 @@ class LeagueStore extends Store {
       if (Date.now() - (parsed.savedAt ?? 0) > CACHE_MAX_AGE_MS) return
       this.data = payload
       this.rememberLeagues(payload)
+      // #24 turu (kullanıcı raporu): hidrasyon selectedDate'i atlıyordu; 304
+      // yanıtında load() erken döndüğü için ensureSelectedDate de çalışmıyor,
+      // "Tümü" listesi gün tıklanana dek BOŞ kalıyordu. Burada da seç.
+      this.ensureSelectedDate()
       this.etag = typeof parsed.etag === 'string' ? parsed.etag : ''
       this.hydratedFromCache = true
     } catch {
@@ -133,6 +137,9 @@ class LeagueStore extends Store {
         this.consecutiveFailures = 0
         this.hydratedFromCache = false
         this.lastLoadedAt = Date.now()
+        // #24 turu: 304 erken dönüşünde seçili gün garanti altına alınır
+        // (hidrasyon sonrası selectedDate boş kalması boş liste üretiyordu).
+        this.ensureSelectedDate()
         return
       }
       if (!res.ok) throw new Error(`Sunucu ${res.status} döndü`)
