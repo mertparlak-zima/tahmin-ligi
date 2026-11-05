@@ -2,7 +2,7 @@
 // idempotency/başarısız gönderim + api/notify.js yetki kapısı (offline).
 
 import assert from 'node:assert/strict'
-import { sanitizeName, dateLabel, packChunks, runNightlyNotify } from '../../lib/notify.js'
+import { sanitizeName, dateLabel, standingsTable, packChunks, composeDigestParts, runNightlyNotify } from '../../lib/notify.js'
 import { GET as notifyGET } from '../../api/notify.js'
 import { createSuite, createMemorySupabase, withStubbedFetch, hour, iso, runIfMain } from './helpers.mjs'
 
@@ -69,6 +69,23 @@ suite.test("packChunks: uzun özet parçalanır, maç bloğu bölünmez, id'ler 
   assert.deepEqual(chunks.flatMap(c => c.matchIds), ['m0', 'm1', 'm2', 'm3', 'm4'])
 })
 
+suite.test('standingsTable: monospace hizalı tablo; uzun isim kırpılır; emoji yok', () => {
+  const rows = [
+    { name: 'Çok Uzun Oyuncu Adı Deneme Numarası', points: 12 },
+    { name: 'Ada', points: 3 },
+  ]
+  const table = standingsTable(rows)
+  const lines = table.split('\n')
+  assert.equal(lines[0], '```', 'tablo kod bloğu içinde')
+  assert.equal(lines[lines.length - 1], '```', 'fence dengeli kapanır')
+  const body = lines.slice(1, -1)
+  assert.equal(new Set(body.map(l => l.length)).size, 1, 'tüm satırlar eşit genişlikte (hiza)')
+  assert.ok(body[0].includes('Oyuncu') && body[0].endsWith('Puan'), 'başlık satırı: # Oyuncu Puan')
+  assert.ok(body[2].includes('…'), 'uzun isim MAX sütunda kırpılır')
+  assert.ok(!table.includes('✅') && !table.includes('❌') && !table.includes('📊'), 'blok içinde emoji yok (hiza)')
+  assert.equal(standingsTable([]), '', 'boş puan durumu tablo üretmez')
+})
+
 suite.test('dry-run: doğru özet metni, HİÇBİR yazma yapılmaz', async () => {
   const sup = seedSupabase()
   const result = await runNightlyNotify(sup, { dry: true })
@@ -78,18 +95,51 @@ suite.test('dry-run: doğru özet metni, HİÇBİR yazma yapılmaz', async () =>
   assert.equal(result.skippedNoPred, 1, 'm3 sessiz')
   assert.equal(result.messageCount, 1)
   const text = result.chunks[0]
-  assert.ok(text.startsWith('🏟 Tahmin Ligi · '), 'başlık ilk satır')
+  // #33 biçimi: lig başına bölüm başlığı; oyuncular alt alta puansız;
+  // puan durumu kod bloğu tablo; sonda masked link.
+  assert.ok(text.startsWith('🏟 Tahmin Ligi · Süper Lig · '), 'ilk bölüm başlığı: lig adı + tarih (m1 erken)')
+  assert.ok(text.includes('🏟 Tahmin Ligi · Avrupa · '), 'her ligin kendi bölüm başlığı')
   assert.ok(text.includes('Galatasaray 3-1 Samsunspor'))
-  assert.ok(text.includes('Ogün ✅ +1 · Mert ❌ 0'), 'doğru önce, sonra yanlış')
+  assert.ok(text.includes('✅ Ogün\n❌ Mert'), 'sonuçlar alt alta, doğru önce')
+  assert.ok(!text.includes('+1') && !text.includes('❌ 0'), 'puan eki yazılmaz (#33)')
   assert.ok(text.includes('Beşiktaş 1-1 Lyon (ŞL)'), 'UEFA maçı kısa etiket taşır')
   assert.ok(!text.includes('Eski'), 'pasif oyuncunun tahmini satırda yok')
   assert.ok(!text.includes('Konyaspor'), 'tahminsiz maç özette yok')
   assert.ok(!text.includes('Fenerbahçe'), 'canlı maç özette yok')
-  assert.ok(text.includes('📊 Süper Lig: 1. Ogün 2 · 2. Mert 0'), 'TSL puanı: m1 doğru + m5 (flagli) doğru')
-  assert.ok(text.includes('📊 Avrupa: 1. Ogün 1 · 2. Mert 0'))
+  assert.ok(text.includes('📊 Süper Lig Puan Durumu'))
+  assert.match(text, /# {2}Oyuncu {2,}Puan/, 'tablo başlık satırı hizalı')
+  assert.match(text, /1 {2}Ogün {2,}2/, 'TSL tablosu: Ogün 2 (m1 doğru + flagli m5 doğru)')
+  assert.match(text, /2 {2}Mert {2,}0/, 'TSL tablosu: Mert 0')
+  assert.ok(text.includes('📊 Avrupa Puan Durumu'))
+  assert.match(text, /1 {2}Ogün {2,}1/, 'EU tablosu: Ogün 1 (m2 beraberlik doğru)')
+  const fences = (text.match(/```/g) ?? []).length
+  assert.equal(fences % 2, 0, 'kod bloğu fence\'leri dengeli')
+  assert.ok(text.includes('🔗 [tahmin-ligi-one.vercel.app](https://tahmin-ligi-one.vercel.app)'), 'tıklanabilir site linki (öntanımlı)')
   // Hiçbir şey yazılmadı:
   const { data: flags } = await sup.from('match_notifications').select('match_id')
   assert.deepEqual(flags.map(f => f.match_id).sort(), ['m5'])
+})
+
+suite.test('siteUrl: opts linki özelleştirir; https dışı URL düz metin düşer', async () => {
+  const sup = seedSupabase()
+  const custom = await runNightlyNotify(sup, { dry: true, siteUrl: 'https://ornek.example/lige-gir' })
+  assert.ok(custom.chunks.some(c => c.includes('🔗 [ornek.example/lige-gir](https://ornek.example/lige-gir)')), 'masked link özelleşir')
+  const plain = await runNightlyNotify(sup, { dry: true, siteUrl: 'http://guvensiz.example' })
+  assert.ok(plain.chunks.some(c => c.includes('🔗 http://guvensiz.example') && !c.includes('[guvensiz')), 'https olmayan URL masked link olmaz')
+})
+
+suite.test('composeDigestParts: bölüm başlığı ilk maç bloğuna yapışık (ayrı parça değil)', () => {
+  const parts = composeDigestParts({
+    pending: [matches[0]],
+    allFinished: [matches[0]],
+    players,
+    predictions,
+    scoring: { correctOutcome: 1 },
+  })
+  const first = parts[0]
+  assert.ok(first.text.startsWith('🏟 Tahmin Ligi · Süper Lig · '), 'başlık ilk maç bloğunun içinde')
+  assert.deepEqual(first.matchIds, [matches[0].id], 'başlık taşıyan blok maç flag\'ini taşır')
+  assert.ok(!parts.some(p => p.matchIds.length === 0 && p.text.startsWith('🏟')), 'kopuk başlık parçası yok')
 })
 
 suite.test("gerçek gönderim: mesaj gider, gönderilen + tahminsiz maçlar flag'lenir", async () => {

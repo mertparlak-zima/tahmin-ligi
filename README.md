@@ -60,8 +60,12 @@ Her gece **00:20 TR** (21:20 UTC)'de Vercel cron (`vercel.json → crons`)
 `GET /api/notify` ucunu `Authorization: Bearer CRON_SECRET` ile çağırır. Uç
 önce senkronu tazeler (site hiç açılmasa bile final skorlar DB'ye düşer),
 sonra **bitmiş + en az 1 (aktif) tahminli + henüz gönderilmemiş** maçları tek
-**sade düz metin** özetinde Discord webhook'una gönderir: skor + oyuncu
-başına ✅/❌ ve puan, altta güncel lig puan durumu. Aynı maç ikinci kez
+**sade düz metin** özetinde Discord webhook'una gönderir (#33 biçimi): lig
+başına bölüm — başlıkta "Tahmin Ligi · Lig · Tarih", maçın skor satırı altında
+oyuncu başına alt alta ✅/❌ (puan yazısı yok), özetin altında lig bazlı puan
+durumu **monospace kod bloğu tablosu** olarak (Discord markdown tablo render
+etmez; kod bloğu tek çözümdür) ve en altta **tıklanabilir site linki**
+(`SITE_URL` env'i, öntanımlı üretim adresi). Aynı maç ikinci kez
 gönderilemez: `match_notifications` tablosu maç başına tek seferlik flag
 tutar (migration, geçmiş bitmiş maçları da "gönderilmiş" olarak tohumlar).
 Discord gönderimi başarısızsa flag yazılmaz → ertesi gece otomatik yeniden
@@ -122,6 +126,7 @@ göndermez; migration sonrası kendi kendine düzelir.
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role anahtarı (yalnız server'da) |
 | `DISCORD_WEBHOOK_URL` | (#29) gece özeti webhook URL'i — yalnız server; tanımsızsa uç dry-run'a düşer |
 | `CRON_SECRET` | (#29) cron isteğini imzalar; tanımsızsa `/api/notify` üretimde 503 ile kapalıdır |
+| `SITE_URL` | (#33) gece özeti altındaki site linki; tanımsızsa `https://tahmin-ligi-one.vercel.app` |
 
 Bu ilk ikisi zorunludur. `SYNC_STALE_SECONDS` (90) ve `LEAGUE_NAME` ("Tahmin Ligi")
 env'e girilmezse kod içindeki varsayılanlarla çalışır. (#24 ile `ADMIN_PASSWORD`
