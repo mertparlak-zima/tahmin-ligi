@@ -2510,7 +2510,12 @@ body.league-tsl .brand-mark {
   font-size: 12.5px;
   font-weight: 850;
   color: var(--muted);
-  transition: background 0.15s ease, color 0.15s ease;
+  /* #33: seçili olmayan düğmeler düz yazı gibi görünüyordu — her seçenek
+     görünür çerçeve + zeminle başlar; hover yoksa da (dokunmatik) buton
+     affordansı korunur. */
+  border: 1px solid var(--line-strong);
+  background: var(--surface-3);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 /* #24: takım logolu giriş düğmeleri — "FEN kazanacak" tarzı etiket + crest;
@@ -2535,11 +2540,18 @@ body.league-tsl .brand-mark {
 
 .entry-seg-btn:hover {
   color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .entry-seg-btn.on {
   background: var(--accent);
   color: var(--ink);
+  border-color: var(--accent);
+}
+
+.entry-seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .entry-clear {
@@ -2551,7 +2563,9 @@ body.league-tsl .brand-mark {
   align-items: center;
   justify-content: center;
   color: var(--muted-2);
-  border: 1px solid transparent;
+  /* #33: temizle düğmesi de görünür çerçeveyle başlar (üçüncül eylem —
+     segment düğmelerinden daha sakin çizgi). */
+  border: 1px solid var(--line);
   font-size: 12px;
 }
 
