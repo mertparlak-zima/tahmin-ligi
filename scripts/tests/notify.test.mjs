@@ -1,4 +1,4 @@
-// #29 · lib/notify.js testleri — gece özeti: compose/parçalama/sanitize/
+// #29 + #33 · lib/notify.js testleri — gece özeti: compose/parçalama/sanitize/
 // idempotency/başarısız gönderim + api/notify.js yetki kapısı (offline).
 
 import assert from 'node:assert/strict'
@@ -48,6 +48,12 @@ suite.test('sanitizeName: mention/markdown enjeksiyonu kırılır', () => {
   assert.equal(sanitizeName('|x| ~y~ >z'), 'x y z')
   assert.equal(sanitizeName('   '), '?')
   assert.ok(sanitizeName('x'.repeat(80)).length <= 40)
+  // T2 #34: URL şeması/www öneki düşer — isim alanı herkese açık, isim
+  // Discord'da tıklanabilir link olarak çıkmasın.
+  assert.equal(sanitizeName('https://phish.example'), 'phish.example')
+  assert.equal(sanitizeName('www.phish.example'), 'phish.example')
+  assert.equal(sanitizeName('http://a.b'), 'a.b')
+  assert.equal(sanitizeName('https://'), '?')
 })
 
 suite.test('dateLabel: tek gün gün-adı ile, aralık tire ile', () => {
@@ -126,6 +132,11 @@ suite.test('siteUrl: opts linki özelleştirir; https dışı URL düz metin dü
   assert.ok(custom.chunks.some(c => c.includes('🔗 [ornek.example/lige-gir](https://ornek.example/lige-gir)')), 'masked link özelleşir')
   const plain = await runNightlyNotify(sup, { dry: true, siteUrl: 'http://guvensiz.example' })
   assert.ok(plain.chunks.some(c => c.includes('🔗 http://guvensiz.example') && !c.includes('[guvensiz')), 'https olmayan URL masked link olmaz')
+  // T2 #34: markdown kırıcı parantezli URL masked link olmaz; boş görünen metin düşmez
+  const brackets = await runNightlyNotify(sup, { dry: true, siteUrl: 'https://x.example/a)b' })
+  assert.ok(brackets.chunks.some(c => c.includes('🔗 https://x.example/a)b') && !c.includes('[x.example')), 'parantezli URL düz metin kalır')
+  const emptyHost = await runNightlyNotify(sup, { dry: true, siteUrl: 'https://' })
+  assert.ok(emptyHost.chunks.some(c => c.includes('🔗 https://')), 'boş görünen metin masked link olmaz')
 })
 
 suite.test('composeDigestParts: bölüm başlığı ilk maç bloğuna yapışık (ayrı parça değil)', () => {
@@ -140,6 +151,80 @@ suite.test('composeDigestParts: bölüm başlığı ilk maç bloğuna yapışık
   assert.ok(first.text.startsWith('🏟 Tahmin Ligi · Süper Lig · '), 'başlık ilk maç bloğunun içinde')
   assert.deepEqual(first.matchIds, [matches[0].id], 'başlık taşıyan blok maç flag\'ini taşır')
   assert.ok(!parts.some(p => p.matchIds.length === 0 && p.text.startsWith('🏟')), 'kopuk başlık parçası yok')
+})
+
+suite.test('composeDigestParts: aynı doğruluk grubunda Türkçe alfabetik eşitlik bozma', () => {
+  const match = { id: 'mx', league: 'TSL', season_year: 2026, competition: 'TSL', kickoff: iso(now - hour), status: 'FINISHED', home_name: 'Galatasaray', home_short: 'Galatasaray', away_name: 'Konyaspor', away_short: 'Konyaspor', home_score: 2, away_score: 0 }
+  const tiePlayers = [
+    { id: 't1', name: 'Mert', is_active: true },
+    { id: 't2', name: 'Ahmet', is_active: true },
+    { id: 't3', name: 'Ogün', is_active: true },
+  ]
+  const tiePreds = [
+    { player_id: 't1', match_id: 'mx', outcome: 'A' }, // yanlış
+    { player_id: 't2', match_id: 'mx', outcome: 'D' }, // yanlış
+    { player_id: 't3', match_id: 'mx', outcome: 'H' }, // doğru
+  ]
+  const parts = composeDigestParts({ pending: [match], allFinished: [match], players: tiePlayers, predictions: tiePreds, scoring: { correctOutcome: 1 } })
+  const lines = parts[0].text.split('\n')
+  assert.equal(lines[2], '✅ Ogün', 'doğrular önce')
+  assert.equal(lines[3], '❌ Ahmet', 'yanlışlar Türkçe alfabetik: Ahmet')
+  assert.equal(lines[4], '❌ Mert', 'yanlışlar Türkçe alfabetik: Mert sonra')
+})
+
+suite.test('packChunks: bölünmüş her mesajda fence dengesi korunur (tablo asla ikiye ayrılmaz)', () => {
+  const parts = composeDigestParts({
+    pending: [matches[0], matches[1]], // iki lig → iki tablo
+    allFinished: matches,
+    players,
+    predictions,
+    scoring: { correctOutcome: 1 },
+  })
+  const chunks = packChunks(parts, 120) // agresif bölme
+  assert.ok(chunks.length >= 3, 'küçük sınır çok parça üretir')
+  for (const chunk of chunks) {
+    assert.equal((chunk.text.match(/```/g) ?? []).length % 2, 0, 'her mesajda fence dengeli')
+  }
+  const tableParts = parts.filter(p => p.text.includes('```'))
+  assert.equal(tableParts.length, 2, 'iki ligin tablosu ayrı parçada')
+  for (const part of tableParts) {
+    assert.equal((part.text.match(/```/g) ?? []).length, 2, 'her tablo tek parçada ve kapalı')
+    assert.deepEqual(part.matchIds, [], 'tablo parçası maç flag\'i taşımaz')
+  }
+})
+
+suite.test('kısmi teslim: 2. mesaj başarısızsa yalnız TESLİM EDİLEN parçanın maçları flaglenir', async () => {
+  const many = Array.from({ length: 70 }, (_, i) => ({
+    id: `b${i}`, league: 'TSL', season_year: 2026, competition: 'TSL',
+    kickoff: iso(now - (i + 1) * hour), status: 'FINISHED',
+    home_name: `Ev Sahibi Takım ${i}`, home_short: `Ev ${i}`,
+    away_name: `Deplasman Takımı ${i}`, away_short: `Deplasman ${i}`,
+    home_score: 2, away_score: 1,
+  }))
+  const manyPreds = many.map(m => ({ player_id: 'p1', match_id: m.id, outcome: 'H' }))
+  const sup = createMemorySupabase({
+    players: [players[0], players[1]],
+    matches: many,
+    predictions: manyPreds,
+    match_notifications: [],
+  })
+  const sent = []
+  const result = await runNightlyNotify(sup, {
+    webhookUrl: 'http://discord.test/hook',
+    send: async (_url, content) => {
+      sent.push(content)
+      if (sent.length === 2) throw new Error('Discord webhook 429')
+    },
+  })
+  assert.equal(result.sent, true, 'ilk parça gitti → kısmi teslim')
+  assert.ok(result.messageCount >= 2, 'özet çok mesaja bölündü')
+  assert.ok(result.error, 'hata raporlandı')
+  assert.ok(result.deliveredCount > 0 && result.deliveredCount < result.pendingCount, 'kısmi teslim sayısı')
+  const { data: flags } = await sup.from('match_notifications').select('match_id')
+  assert.equal(flags.length, result.deliveredCount, 'yalnız teslim edilen parçanın maçları flaglendi')
+  for (const chunk of sent) {
+    assert.equal((chunk.match(/```/g) ?? []).length % 2, 0, 'gönderilen mesajlarda fence dengeli')
+  }
 })
 
 suite.test("gerçek gönderim: mesaj gider, gönderilen + tahminsiz maçlar flag'lenir", async () => {
