@@ -48,6 +48,9 @@ export async function GET(request) {
     const result = await runNightlyNotify(supabase, {
       webhookUrl: process.env.DISCORD_WEBHOOK_URL,
       dry: params.get('dry') === '1',
+      // #35: force kapıyı aşar (manuel operasyon). Vercel cron asla force
+      // kullanmaz — zamanlamayı kapı belirler.
+      force: params.get('force') === '1',
     })
     return json(200, result)
   } catch (err) {

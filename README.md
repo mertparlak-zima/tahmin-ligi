@@ -54,10 +54,16 @@ ve arka planda tazelenir (stale-while-revalidate); içerik değişmediğinde
 sunucu ETag/If-None-Match ile gövdesiz **304** yanıtı döner. (#24 ile manuel
 senkron düğmesi kaldırıldı — lazy senkron + bayatlık bandı yeterlidir.)
 
-### Discord gece özeti (#29)
+### Discord gece özeti (#29, #35)
 
-Her gece **00:20 TR** (21:20 UTC)'de Vercel cron (`vercel.json → crons`)
-`GET /api/notify` ucunu `Authorization: Bearer CRON_SECRET` ile çağırır. Uç
+Vercel cron (`vercel.json → crons`) `GET /api/notify` ucunu `Authorization:
+Bearer CRON_SECRET` ile **saatlik pencerelerde** çağırır (TR 21:xx–02:xx —
+Hobby plan dakik hassasiyeti vermediği için her pencere kendi saati içinde
+rastgele bir anda vurur). Asıl zamanlamayı **kapı** belirler (#35): gönderilecek
+maç olsa bile canlı maç, son 6 saatte başlamış bitmemiş maç ya da önümüzdeki
+10 saatte başlayacak maç varken uç hiçbir şey göndermez/yazmaz — özet son
+maçın bitiminden sonraki ilk pencerede gider (normal gece ~23:50–00:10 arası;
+geç maç gecesi ~01:00 sonrası; ertelenen/iptal maçlar bekletmez). Uç
 önce senkronu tazeler (site hiç açılmasa bile final skorlar DB'ye düşer),
 sonra **bitmiş + en az 1 (aktif) tahminli + henüz gönderilmemiş** maçları tek
 **sade düz metin** özetinde Discord webhook'una gönderir (#33 biçimi): lig
@@ -75,7 +81,9 @@ etiket taşır (ŞL/AL/KL). Güvenlik: oyuncu adları sanitize edilir ve
 `allowed_mentions` tamamen kapalıdır (`@everyone` enjeksiyonu imkânsız).
 Ortam değişkenleri (yalnız sunucu): `DISCORD_WEBHOOK_URL`, `CRON_SECRET`
 (tanımsızsa üretim ucu 503 ile kapalıdır). Önizleme: `npm run notify:dry`
-(gerçek DB'den göndermeden; `--send` ile gönderir).
+(gerçek DB'den göndermeden; `--send` ile gönderir — manuel gönderim #35
+kapısını aşar). `?force=1` query'si de kapıyı aşar (manuel operasyon);
+`?dry=1` göndermeden önizletir.
 
 ### Sağlamlık kuralları
 

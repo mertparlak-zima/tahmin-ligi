@@ -22,12 +22,18 @@ await maybeSync(supabase).catch(err => console.log('senkron uyarısı (devam):',
 const result = await runNightlyNotify(supabase, {
   webhookUrl: process.env.DISCORD_WEBHOOK_URL,
   dry: !send || !process.env.DISCORD_WEBHOOK_URL,
+  // #35: manuel gönderim kapıyı aşar (acil/operasyon); önizleme kapıyı raporlar.
+  force: send,
 })
 
 if (send && !process.env.DISCORD_WEBHOOK_URL) {
   console.log('DISCORD_WEBHOOK_URL tanımsız — dry-run önizlemesi:')
 }
-console.log(`\nözet: ${result.pendingCount} gönderilecek maç · ${result.messageCount} mesaj · ${result.skippedNoPred} tahminsiz (sessiz flag)\n`)
+console.log(`\nözet: ${result.pendingCount} gönderilecek maç · ${result.messageCount} mesaj · ${result.skippedNoPred} tahminsiz (sessiz flag)`)
+console.log(`kapı: ${result.gateReady ? 'AÇIK — günün maçları bitti' : `KAPALI — ${result.gateReason ?? 'bekleyen maç var'}`}`)
+if (!result.gateReady && !send) {
+  console.log('  (önizleme kapıdan bağımsız; gerçek gönderim kapı açılınca — ya da --send ile force)')
+}
 
 for (const chunk of result.chunks) {
   console.log('─'.repeat(48))
@@ -37,5 +43,5 @@ console.log('─'.repeat(48))
 
 if (!result.dry) {
   if (result.sent) console.log(`✓ gönderildi (${result.deliveredCount}/${result.pendingCount} maç flag'lendi)`)
-  else console.log(`✗ gönderilemedi: ${result.error} — flag yazılmadı, yarın yeniden denenir`)
+  else console.log(`✗ gönderilemedi: ${result.error} — flag yazılmadı, bir sonraki cron süpürmesinde yeniden denenir`)
 }

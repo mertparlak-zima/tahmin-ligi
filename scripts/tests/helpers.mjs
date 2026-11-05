@@ -109,6 +109,18 @@ class Query {
     return this
   }
 
+  // #35: kickoff ISO aralık sorguları (string karşılaştırma — ISO'da
+  // lexicographic sıra kronolojiktir; sayı sütunlarında da çalışır).
+  gte(col, val) {
+    this.filters.push(row => row[col] >= val)
+    return this
+  }
+
+  lte(col, val) {
+    this.filters.push(row => row[col] <= val)
+    return this
+  }
+
   insert(row) {
     this.op = 'insert'
     this.pendingInsert = row

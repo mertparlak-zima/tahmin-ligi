@@ -1,8 +1,9 @@
-// #29 + #33 · lib/notify.js testleri — gece özeti: compose/parçalama/sanitize/
-// idempotency/başarısız gönderim + api/notify.js yetki kapısı (offline).
+// #29 + #33 + #35 · lib/notify.js testleri — gece özeti: compose/parçalama/
+// sanitize/idempotency/başarısız gönderim + dinamik zamanlama kapısı (gate) +
+// api/notify.js yetki kapısı (offline).
 
 import assert from 'node:assert/strict'
-import { sanitizeName, dateLabel, standingsTable, packChunks, composeDigestParts, runNightlyNotify } from '../../lib/notify.js'
+import { sanitizeName, dateLabel, standingsTable, digestGate, packChunks, composeDigestParts, runNightlyNotify } from '../../lib/notify.js'
 import { GET as notifyGET } from '../../api/notify.js'
 import { createSuite, createMemorySupabase, withStubbedFetch, hour, iso, runIfMain } from './helpers.mjs'
 
@@ -92,6 +93,33 @@ suite.test('standingsTable: monospace hizalı tablo; uzun isim kırpılır; emoj
   assert.equal(standingsTable([]), '', 'boş puan durumu tablo üretmez')
 })
 
+suite.test('digestGate (#35): canlı/başladı-bitmedi/yaklaşan bekletir; bitmiş/inactive/pencere dışı bekletmez', () => {
+  const row = (kickoffOffsetMs, status, name = 'Ev – Deplasman') =>
+    ({ kickoff: iso(now + kickoffOffsetMs), status, home_short: name.split(' – ')[0], away_short: name.split(' – ')[1] })
+  const h = hour
+  // Canlı maç → kapı kapalı
+  assert.equal(digestGate([row(-2 * h, 'IN_PLAY')]).ready, false, 'canlı bekletir')
+  // Başladı ama hâlâ bitmedi (skor yolda) → kapalı
+  assert.equal(digestGate([row(-2 * h, 'TIMED')]).ready, false, 'başladı-bitmedi bekletir')
+  // Önümüzdeki 10 sa içinde başlayacak → kapalı
+  assert.equal(digestGate([row(3 * h, 'SCHEDULED')]).ready, false, 'yaklaşan bekletir')
+  // Bitmiş → bekletmez
+  assert.equal(digestGate([row(-2 * h, 'FINISHED')]).ready, true, 'bitmiş bekletmez')
+  // Erteleme/iptal → bekletmez (asla bitmeyecek)
+  assert.equal(digestGate([row(-2 * h, 'POSTPONED'), row(-2 * h, 'CANCELLED')]).ready, true, 'inactive bekletmez')
+  // Pencere dışı: 11 saat sonra başlayacak (ertesi sabah/öğle) → bekletmez
+  assert.equal(digestGate([row(11 * h, 'SCHEDULED')]).ready, true, '11 sa sonraki bekletmez')
+  // Pencere dışı: 7 saat önce başlamış takılı TIMED → kendini onarır
+  assert.equal(digestGate([row(-7 * h, 'TIMED')]).ready, true, '6 sa penceresi dışı takılı satır bekletmez')
+  // Karışık: bitmiş + yaklaşan → kapalı, nedeni isim taşır
+  const mixed = digestGate([row(-2 * h, 'FINISHED'), row(2 * h, 'SCHEDULED', 'FB – GS')])
+  assert.equal(mixed.ready, false)
+  assert.match(mixed.reason, /yaklaşan/, 'neden etiketi yaklaşan')
+  assert.match(mixed.reason, /FB – GS/, 'nedeninde maç adı')
+  // Boş liste → açık
+  assert.equal(digestGate([]).ready, true)
+})
+
 suite.test('dry-run: doğru özet metni, HİÇBİR yazma yapılmaz', async () => {
   const sup = seedSupabase()
   const result = await runNightlyNotify(sup, { dry: true })
@@ -121,6 +149,11 @@ suite.test('dry-run: doğru özet metni, HİÇBİR yazma yapılmaz', async () =>
   const fences = (text.match(/```/g) ?? []).length
   assert.equal(fences % 2, 0, 'kod bloğu fence\'leri dengeli')
   assert.ok(text.includes('🔗 [tahmin-ligi-one.vercel.app](https://tahmin-ligi-one.vercel.app)'), 'tıklanabilir site linki (öntanımlı)')
+  // #35: fixture'ta m4 canlı (kickoff -2sa, pencere içinde) → kapı kapalı;
+  // dry önizleme yine üretilir ama gate durumu raporlanır.
+  assert.equal(result.gateReady, false, 'canlı maç yüzünden kapı kapalı')
+  assert.equal(result.gated, true, 'dry raporu kapalı kapıyı işaretler')
+  assert.match(result.gateReason, /canlı/, 'neden canlı maç')
   // Hiçbir şey yazılmadı:
   const { data: flags } = await sup.from('match_notifications').select('match_id')
   assert.deepEqual(flags.map(f => f.match_id).sort(), ['m5'])
@@ -230,7 +263,7 @@ suite.test('kısmi teslim: 2. mesaj başarısızsa yalnız TESLİM EDİLEN parç
 suite.test("gerçek gönderim: mesaj gider, gönderilen + tahminsiz maçlar flag'lenir", async () => {
   const sup = seedSupabase()
   const calls = []
-  const result = await runNightlyNotify(sup, { webhookUrl: 'http://discord.test/hook', send: async (_url, content) => { calls.push(content) } })
+  const result = await runNightlyNotify(sup, { webhookUrl: 'http://discord.test/hook', force: true, send: async (_url, content) => { calls.push(content) } })
   assert.equal(result.sent, true)
   assert.equal(result.messageCount, 1)
   assert.equal(calls.length, 1, 'tek özet mesajı')
@@ -241,7 +274,7 @@ suite.test("gerçek gönderim: mesaj gider, gönderilen + tahminsiz maçlar flag
 
 suite.test('idempotent: ikinci turda gönderilecek yok, send çağrılmaz', async () => {
   const sup = seedSupabase()
-  await runNightlyNotify(sup, { webhookUrl: 'u', send: async () => {} })
+  await runNightlyNotify(sup, { webhookUrl: 'u', force: true, send: async () => {} })
   let called = 0
   const second = await runNightlyNotify(sup, { webhookUrl: 'u', send: async () => { called += 1 } })
   assert.equal(second.sent, false)
@@ -254,12 +287,59 @@ suite.test('Discord hatası: flag YAZILMAZ → ertesi gece retry', async () => {
   const sup = seedSupabase()
   const result = await runNightlyNotify(sup, {
     webhookUrl: 'http://discord.test/hook',
+    force: true,
     send: async () => { throw new Error('Discord webhook 429') },
   })
   assert.equal(result.sent, false)
   assert.equal(result.error, 'Discord webhook 429')
   const { data: flags } = await sup.from('match_notifications').select('match_id')
   assert.deepEqual(flags.map(f => f.match_id).sort(), ['m5'], 'hiçbir yeni flag yazılmadı')
+})
+
+suite.test('#35 kapı: günün maçı sürüyorsa gerçek gönderim TAM no-op (send çağrılmaz, hiçbir şey yazılmaz)', async () => {
+  const sup = seedSupabase() // m1/m2 gönderilecek + m4 canlı (pencere içinde)
+  let called = 0
+  const result = await runNightlyNotify(sup, {
+    webhookUrl: 'http://discord.test/hook',
+    send: async () => { called += 1 },
+  })
+  assert.equal(result.gated, true, 'kapı kapalı raporlanır')
+  assert.equal(result.gateReady, false)
+  assert.match(result.gateReason, /canlı/)
+  assert.equal(result.sent, false)
+  assert.equal(result.messageCount, 0)
+  assert.equal(called, 0, 'webhook hiç dürtülmedi')
+  const { data: flags } = await sup.from('match_notifications').select('match_id')
+  assert.deepEqual(flags.map(f => f.match_id).sort(), ['m5'], 'hiçbir yeni flag yazılmadı (m1/m2 sonraki süpürmede)')
+})
+
+suite.test('#35 kapı: force true gönderimi zorlar (manuel operasyon yolu)', async () => {
+  const sup = seedSupabase()
+  const calls = []
+  const result = await runNightlyNotify(sup, {
+    webhookUrl: 'http://discord.test/hook',
+    force: true,
+    send: async (_url, content) => { calls.push(content) },
+  })
+  assert.equal(result.gated, undefined, 'force ile kapı raporu kalkar')
+  assert.equal(result.gateReady, false, 'kapı gerçekte kapalıydı — bilgi taşınır')
+  assert.equal(result.sent, true)
+  assert.equal(calls.length, 1)
+})
+
+suite.test('#35 kapı: maç bitince (canlı kalkınca) aynı gece süpürmesi teslim eder', async () => {
+  const sup = seedSupabase()
+  // 1. tur: canlı maç varken no-op
+  await runNightlyNotify(sup, { webhookUrl: 'u', send: async () => { throw new Error('çağrılmamalı') } })
+  // 2. tur: canlı maç bitti (m4 → FINISHED 1-0, tahminli yap)
+  sup.store.matches.find(m => m.id === 'm4').status = 'FINISHED'
+  sup.store.predictions.push({ player_id: 'p1', match_id: 'm4', outcome: 'H' })
+  let called = 0
+  const result = await runNightlyNotify(sup, { webhookUrl: 'u', send: async () => { called += 1 } })
+  assert.equal(result.gateReady, true, 'pencerede bekleyen kalmadı')
+  assert.equal(result.sent, true, 'm1+m2+m4 tek özette gider')
+  assert.equal(result.pendingCount, 3)
+  assert.equal(called, 1)
 })
 
 suite.test('api/notify.js: üretimde CRON_SECRET yoksa uç kapalı (503)', async () => {
@@ -291,6 +371,7 @@ suite.test('api/notify.js: yanlış/başlıksız Bearer 401; demo (supabase enje
     const body = await res.json()
     assert.equal(body.dry, true)
     assert.equal(body.pendingCount, 2)
+    assert.equal(body.gateReady, false, '#35: fixturetaki canlı maç kapıyı kapatır (dry raporlar)')
     assert.ok(!JSON.stringify(body).includes('discord.test'), 'yanıtta webhook URL\'si olamaz')
   } finally {
     stub.restore()

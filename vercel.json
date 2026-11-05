@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/notify", "schedule": "20 21 * * *" }
+    { "path": "/api/notify", "schedule": "0 18 * * *" },
+    { "path": "/api/notify", "schedule": "0 19 * * *" },
+    { "path": "/api/notify", "schedule": "0 20 * * *" },
+    { "path": "/api/notify", "schedule": "0 21 * * *" },
+    { "path": "/api/notify", "schedule": "0 22 * * *" },
+    { "path": "/api/notify", "schedule": "0 23 * * *" }
   ],
   "functions": {
     "api/**/*.js": {
