@@ -2862,3 +2862,131 @@ body.league-tsl .brand-mark {
   }
 }
 
+/* ---------- /maho gizli sohbet sayfası ---------- */
+
+.maho-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 18px 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.maho-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.maho-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.maho-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-2);
+}
+
+.maho-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+}
+
+.maho-name {
+  max-width: 240px;
+}
+
+.maho-text {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.45;
+  font-family: inherit;
+}
+
+.maho-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.maho-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-2);
+}
+
+.maho-count.max {
+  color: #ff5d70;
+  font-weight: 700;
+}
+
+/* Oturum listesi — .has deseni (kural 4): kök hep render, görünür olmayan
+   boş durumda tüm blok gizlenir. */
+.maho-sent {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.maho-sent.has {
+  display: flex;
+}
+
+.maho-sent-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-2);
+}
+
+.maho-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  border: 1px solid var(--line-strong);
+}
+
+.maho-msg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.maho-msg-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.maho-msg-at {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-2);
+}
+
+.maho-msg-text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+

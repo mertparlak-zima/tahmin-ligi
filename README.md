@@ -85,6 +85,30 @@ Ortam değişkenleri (yalnız sunucu): `DISCORD_WEBHOOK_URL`, `CRON_SECRET`
 kapısını aşar). `?force=1` query'si de kapıyı aşar (manuel operasyon);
 `?dry=1` göndermeden önizletir.
 
+### /maho gizli sohbet sayfası
+
+`/maho` URL'i, arayüzde HİÇBİR YERDE linklenmeyen gizli bir sayfa açar (nav,
+footer, lig değiştirici — iz yok; gizlilik = URL bilgisi + mevcut Vercel
+Deployment Protection, ek kimlik doğrulama yoktur). Sayfa tek amaca hizmet
+eder: bir metin kutusu + **Gönder** düğmesi (Enter gönderir, Shift+Enter alt
+satır). Yazılan metin **ön eksiz/prefix'siz** — ne eklenir ne değiştirilir —
+anında gece özetiyle AYNI Discord kanalına (aynı `DISCORD_WEBHOOK_URL`)
+düşer. Opsiyonel **İsim** alanı mesaja özel webhook `username` override'u
+taşır (Discord sınırı 80 kr; boşsa webhook'un varsayılan adıyla gider; son
+girilen ad cihazda saklanır). Gönderilenler yalnız oturum süresince sayfada
+listelenir (client belleği — Discord'dan geri okuma yoktur); kalıcı moderasyon
+kaydı sunucuda `manual_messages` tablosuna yazılır (**tablo = "Discord'a
+düşenler"**: gönderim başarısızsa satır yazılmaz). Koruma: mesaj başına 2000
+kr sınırı + kontrol/zero-width karakter temizliği, IP başına hafif rate limit
+(8 mesaj / 30 sn, instance-içi best effort) ve `allowed_mentions` tamamen
+kapalı (`@everyone` enjeksiyonu imkânsız — gece özeti deseni). Bilinçli
+sınır: mesaj gövdesine dokunulmadığından Discord markdown'ı render eder ve
+**masked link'ler tıklanabilir çıkar** (gece özetindeki site linki gibi) —
+kanalda gördüğün linke her zamanki dikkatle bak. Uç
+`POST /api/maho` herkese açıktır; `DISCORD_WEBHOOK_URL` tanımsızsa üretimde
+503 ile kapalıdır. Lokal demo (`npm run dev:api`) webhook olmadan çalışır —
+mesajlar konsola loglanır, Discord'a istek ATMAZ.
+
 ### Sağlamlık kuralları
 
 - Maçlar `(provider, external_id)` anahtarıyla idempotent yazılır.
@@ -123,6 +147,12 @@ SQL önce işlenirse mevcut Avrupa verisi etkilenmez (varsayılan lig `EU`).
 dökmesin). Kod önce deploy edilirse uç zararsız biçimde hata verip mesaj
 göndermez; migration sonrası kendi kendine düzelir.
 
+**Migration deploy sırası (/maho):** gizli sohbet kodu canlıya çıkmadan ÖNCE
+`supabase/migrations/2026-11-manual-messages.sql` çalıştırılmalıdır (moderasyon
+tablosu). Kod önce deploy edilirse mesajlar Discord'a GİDER ama moderasyon
+kaydı düşmez (`stored:false` log'lanır); migration sonrası kendi kendine
+düzelir — veri kaybı yoktur, yalnız o aradaki mesajlar kayıtsız kalır.
+
 ### Vercel
 
 1. Projeyi Vercel'e bağla (Vite otomatik algılanır).
@@ -132,7 +162,7 @@ göndermez; migration sonrası kendi kendine düzelir.
 | --- | --- |
 | `SUPABASE_URL` | Supabase proje URL'i |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role anahtarı (yalnız server'da) |
-| `DISCORD_WEBHOOK_URL` | (#29) gece özeti webhook URL'i — yalnız server; tanımsızsa uç dry-run'a düşer |
+| `DISCORD_WEBHOOK_URL` | (#29) gece özeti webhook URL'i — yalnız server; tanımsızsa uç dry-run'a düşer. /maho sayfası da AYNI webhook'u kullanır (tanımsızsa `/api/maho` üretimde kapalıdır) |
 | `CRON_SECRET` | (#29) cron isteğini imzalar; tanımsızsa `/api/notify` üretimde 503 ile kapalıdır |
 | `SITE_URL` | (#33) gece özeti altındaki site linki; tanımsızsa `https://tahmin-ligi-one.vercel.app` |
 
@@ -193,6 +223,8 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
   açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"** ile
   yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
   "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
+- **/maho (gizli)**: URL ile erişilen sohbet sayfası — yazdığın mesaj anında
+  Discord kanalına düşer (bkv. "Discord gece özeti" bölümündeki /maho anlatımı).
 
 ## API
 
@@ -208,6 +240,7 @@ Protection ile sınırlıdır.
 | `DELETE` | `/api/players` | Oyuncu sil (tahmini yoksa) |
 | `POST` | `/api/players/avatar` | Avatar yükle (kırpılmış görsel, Storage'a) |
 | `DELETE` | `/api/players/avatar` | Avatar kaldır |
+| `POST` | `/api/maho` | Gizli sohbet mesajı Discord'a yollar (`{text, name?}`; text ≤2000 kr; Discord'a düşeni `manual_messages`'a yazar) |
 
 `PUT /api/predictions` gövdesi: `{playerId, items:[{matchId, outcome}]}` —
 `outcome: ''` tahmini siler; batch atomic'tir (bir kilitli maç tüm grubu reddettirir).
@@ -217,13 +250,13 @@ Protection ile sınırlıdır.
 ```text
 api/            Vercel serverless fonksiyonları
 infra/runner/   Yerel self-hosted Docker runner (tahmin-ligi-docker-1)
-lib/            Sunucu katmanı: espn, targets, sync, league, status, supabase
+lib/            Sunucu katmanı: espn, targets, sync, league, status, supabase, notify, maho
 public/logos/   Lig zemin logoları (eu.svg, tsl.svg — aynı adla değiştirilebilir)
 supabase/       Veritabanı şeması + migrations
 scripts/        Duman testleri
 src/
-  stores/       league-store (veri+polling), ui-store, predictions-store, avatar-store
-  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş
+  stores/       league-store (veri+polling), ui-store, predictions-store, avatar-store, maho-store
+  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş, maho (gizli)
   components/   DateStrip, MatchRow, MatchSheet, StandingsTable, Podium, ...
 ```
 

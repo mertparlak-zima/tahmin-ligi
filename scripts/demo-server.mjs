@@ -18,6 +18,7 @@ import { buildLeaguePayload } from '../lib/league.js'
 import { seasonYear } from '../lib/espn.js'
 import { GET as leagueGET } from '../api/league.js'
 import { GET as notifyGET } from '../api/notify.js'
+import { POST as mahoPOST } from '../api/maho.js'
 import { savePredictions } from '../api/predictions.js'
 import { createPlayer, updatePlayer, deletePlayer } from '../api/players.js'
 import { uploadAvatar, deleteAvatar } from '../api/players/avatar.js'
@@ -190,6 +191,8 @@ function createMemorySupabase() {
     predictions: [],
     // #29: gönderilen maç özetlerinin flag'i (gece özeti ucu).
     match_notifications: [],
+    // /maho: Discord'a iletilen manuel mesajların moderasyon kaydı.
+    manual_messages: [],
     app_config: [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
     ],
@@ -383,6 +386,16 @@ async function handleApi(request) {
     webReq.supabase = supabase
     const res = await notifyGET(webReq)
     console.log(`GET /api/notify → ${res.status} (${Date.now() - started} ms)`)
+    return res
+  }
+
+  // /maho gizli sohbet ucu — demo deposu enjekte edilir. DISCORD_WEBHOOK_URL
+  // yoksa uç otomatik konsol-log gönderimine düşer (hiçbir dış istek atmaz).
+  if (method === 'POST' && pathname === '/api/maho') {
+    const webReq = toWebRequest(request, await readBody(request).catch(() => ({})))
+    webReq.supabase = supabase
+    const res = await mahoPOST(webReq)
+    console.log(`POST /api/maho → ${res.status}`)
     return res
   }
 
