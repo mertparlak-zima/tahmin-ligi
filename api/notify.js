@@ -1,7 +1,10 @@
 // GET /api/notify — Vercel cron gece özeti ucu (#29).
-// vercel.json crons kaydı günde 1 kez 00:20 TR (21:20 UTC) vurur. Koruma:
-// Authorization: Bearer CRON_SECRET (Vercel, CRON_SECRET tanımlıysa bu başlığı
-// cron isteklerine otomatik ekler). ?dry=1 → göndermeden önizleme.
+// vercel.json crons (#35) TR 21:xx–02:xx saatlik pencerelerde dürtüyor
+// (Hobby plan dakik hassasiyeti vermez); asıl zamanlamayı lib/notify.js
+// digestGate belirler — günün maçları bitmeden hiçbir şey gönderilmez.
+// Koruma: Authorization: Bearer CRON_SECRET (Vercel, CRON_SECRET tanımlıysa
+// bu başlığı cron isteklerine otomatik ekler). ?dry=1 → göndermeden önizleme;
+// ?force=1 → kapıyı aş (manuel operasyon — cron asla kullanmaz).
 //
 // Akış: senkron tazelenir (site açılmasa da skorlar DB'ye düşer — maybeSync
 // eşikleri canlı maç varken 90 sn'dir, final skor kaçmaz) → bitmiş + tahminli
@@ -46,8 +49,13 @@ export async function GET(request) {
     await maybeSync(supabase).catch(() => {})
     const params = new URL(request.url).searchParams
     const result = await runNightlyNotify(supabase, {
+      // Webhook tanımsızsa dry'a düş (T2 #36: api her zaman açık dry değeri
+      // geçtiğinden libs'teki ?? düşüşü devreye girmiyordu).
       webhookUrl: process.env.DISCORD_WEBHOOK_URL,
-      dry: params.get('dry') === '1',
+      dry: params.get('dry') === '1' || !process.env.DISCORD_WEBHOOK_URL,
+      // #35: force kapıyı aşar (manuel operasyon). Vercel cron asla force
+      // kullanmaz — zamanlamayı kapı belirler.
+      force: params.get('force') === '1',
     })
     return json(200, result)
   } catch (err) {
