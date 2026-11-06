@@ -93,3 +93,17 @@ create table if not exists sync_state (
 );
 
 insert into sync_state (id) values (1) on conflict (id) do nothing;
+
+-- /maho gizli sohbet: Discord'a iletilen manuel mesajların moderasyon kaydı
+-- (bkv. migrations/2026-11-manual-messages.sql — mevcut kurulumlarda o dosya
+-- ile eklenir). name nullable = webhook varsayılan adıyla gönderilen mesaj.
+create table if not exists manual_messages (
+  id         bigint generated always as identity primary key,
+  text       text not null,
+  name       text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists manual_messages_created_idx on manual_messages (created_at);
+
+alter table manual_messages enable row level security;

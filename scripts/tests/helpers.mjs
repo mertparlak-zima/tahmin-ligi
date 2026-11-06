@@ -273,6 +273,8 @@ export function createMemorySupabase(seed = {}, opts = {}) {
     predictions: clone(seed.predictions ?? []),
     // #29 gece özeti: gönderilen maç flag'leri.
     match_notifications: clone(seed.match_notifications ?? []),
+    // /maho: Discord'a iletilen manuel mesajların moderasyon kaydı.
+    manual_messages: clone(seed.manual_messages ?? []),
     app_config: clone(seed.app_config ?? [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
     ]),

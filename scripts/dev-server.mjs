@@ -16,6 +16,7 @@ import { GET as leagueGET } from '../api/league.js'
 import * as predictionsApi from '../api/predictions.js'
 import * as playersApi from '../api/players.js'
 import * as avatarApi from '../api/players/avatar.js'
+import * as mahoApi from '../api/maho.js'
 
 // Yöntem → yol eşlemesi: her uç kendi named method export'unu çalıştırır
 // (supabase env'den kurulur; readonly ucu 503 verir).
@@ -26,6 +27,7 @@ const apiRoutes = {
   'DELETE /api/players': playersApi.DELETE,
   'POST /api/players/avatar': avatarApi.POST,
   'DELETE /api/players/avatar': avatarApi.DELETE,
+  'POST /api/maho': mahoApi.POST,
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
