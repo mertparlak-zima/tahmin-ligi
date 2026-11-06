@@ -111,6 +111,12 @@ suite.test('digestGate (#35): canlı/başladı-bitmedi/yaklaşan bekletir; bitmi
   assert.equal(digestGate([row(11 * h, 'SCHEDULED')]).ready, true, '11 sa sonraki bekletmez')
   // Pencere dışı: 7 saat önce başlamış takılı TIMED → kendini onarır
   assert.equal(digestGate([row(-7 * h, 'TIMED')]).ready, true, '6 sa penceresi dışı takılı satır bekletmez')
+  // Pencere dışı takılı CANLI da bekletmez — bilinçli fail-open (satır zaten
+  // pencere sorgusuna girmez; kapı veri hatasına kilitlenmez).
+  assert.equal(digestGate([row(-7 * h, 'IN_PLAY')], now).ready, true, 'pencere dışı canlı bekletmez (fail-open)')
+  // Pencere sınırları DAHİL DEĞİL (fail-open): tam −6sa / tam +10sa engellemez
+  assert.equal(digestGate([row(-6 * h, 'TIMED')], now).ready, true, 'tam −6sa sınırı engellemez')
+  assert.equal(digestGate([row(10 * h, 'SCHEDULED')], now).ready, true, 'tam +10sa sınırı engellemez')
   // Karışık: bitmiş + yaklaşan → kapalı, nedeni isim taşır
   const mixed = digestGate([row(-2 * h, 'FINISHED'), row(2 * h, 'SCHEDULED', 'FB – GS')])
   assert.equal(mixed.ready, false)
@@ -373,6 +379,13 @@ suite.test('api/notify.js: yanlış/başlıksız Bearer 401; demo (supabase enje
     assert.equal(body.pendingCount, 2)
     assert.equal(body.gateReady, false, '#35: fixturetaki canlı maç kapıyı kapatır (dry raporlar)')
     assert.ok(!JSON.stringify(body).includes('discord.test'), 'yanıtta webhook URL\'si olamaz')
+    // #35 force + webhook yok → dry fallback birlikte çalışır
+    const webReqForce = new Request('http://x/api/notify?force=1')
+    webReqForce.supabase = seedSupabase()
+    const forceBody = await (await notifyGET(webReqForce)).json()
+    assert.equal(forceBody.forced, true, 'force api üzerinden taşınır')
+    assert.equal(forceBody.gated, false, 'force raporunda gated kalkar')
+    assert.equal(forceBody.dry, true, 'webhook tanımsız → uç dry\'a düşer (T2 #36)')
   } finally {
     stub.restore()
     process.env.CRON_SECRET = savedSecret
