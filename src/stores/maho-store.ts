@@ -6,7 +6,7 @@
 import { Store } from '@geajs/core'
 import uiStore from './ui-store'
 
-const MAX_TEXT = 2000 // api/lib-maho.js ile aynı sınır (Discord content)
+const MAX_TEXT = 2000 // lib/maho.js ile aynı sınır (Discord content)
 const MAX_NAME = 80 // Discord username override sınırı
 const NAME_KEY = 'tahminligi.maho.name'
 
@@ -68,6 +68,15 @@ class MahoStore extends Store {
 
   get canSend(): boolean {
     return !this.sending && this.text.trim().length > 0
+  }
+
+  /** Sayaç/limit etiketleri için sunucuyla aynı sınır (tek kaynak). */
+  get maxText(): number {
+    return MAX_TEXT
+  }
+
+  get maxName(): number {
+    return MAX_NAME
   }
 
   /** POST /api/maho → başarıda taslak temizlenir, oturum listesine düşer.

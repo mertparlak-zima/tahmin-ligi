@@ -60,8 +60,8 @@ export default class MahoPage extends Component {
             }}
           ></textarea>
           <div class="maho-actions">
-            <span class={mahoStore.text.length >= 2000 ? 'maho-count max' : 'maho-count'}>
-              {mahoStore.text.length}/2000
+            <span class={mahoStore.text.length >= mahoStore.maxText ? 'maho-count max' : 'maho-count'}>
+              {mahoStore.text.length}/{mahoStore.maxText}
             </span>
             <button
               class="btn primary"

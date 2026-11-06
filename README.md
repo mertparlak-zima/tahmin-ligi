@@ -101,7 +101,10 @@ kaydı sunucuda `manual_messages` tablosuna yazılır (**tablo = "Discord'a
 düşenler"**: gönderim başarısızsa satır yazılmaz). Koruma: mesaj başına 2000
 kr sınırı + kontrol/zero-width karakter temizliği, IP başına hafif rate limit
 (8 mesaj / 30 sn, instance-içi best effort) ve `allowed_mentions` tamamen
-kapalı (`@everyone` enjeksiyonu imkânsız — gece özeti deseni). Uç
+kapalı (`@everyone` enjeksiyonu imkânsız — gece özeti deseni). Bilinçli
+sınır: mesaj gövdesine dokunulmadığından Discord markdown'ı render eder ve
+**masked link'ler tıklanabilir çıkar** (gece özetindeki site linki gibi) —
+kanalda gördüğün linke her zamanki dikkatle bak. Uç
 `POST /api/maho` herkese açıktır; `DISCORD_WEBHOOK_URL` tanımsızsa üretimde
 503 ile kapalıdır. Lokal demo (`npm run dev:api`) webhook olmadan çalışır —
 mesajlar konsola loglanır, Discord'a istek ATMAZ.

@@ -12,7 +12,7 @@
 // deseni). Not: Vercel web-standard imza için NAMED METHOD export ister.
 
 import { getSupabase, isReadonly } from '../lib/supabase.js'
-import { sendMahoMessage, validateText, normalizeName, createRateLimiter } from '../lib/maho.js'
+import { sendMahoMessage, validateText, normalizeName, isNameForbidden, createRateLimiter } from '../lib/maho.js'
 
 const READONLY_MSG =
   'Salt-okunur mod: SUPABASE_SERVICE_ROLE_KEY tanımlı değil. Yazma işlemleri için .env dosyasına ekleyin.'
@@ -30,11 +30,15 @@ const json = (status, body) =>
 // Instance-içi limiter (serverless'ta dağıtık değildir — best effort).
 const limiter = createRateLimiter()
 
-/** İstemci anahtarı: x-forwarded-for'un ilk değeri (Vercel proxy'si yazarken
- *  istemci IP'sidir); lokalde başlık yoktur → 'local'. */
+/** İstemci anahtarı: platform-unutturulmuş x-real-ip (Vercel) yoksa
+ *  x-forwarded-for'un SON değeri (zincire istemci ekleyebildiği baştakiler
+ *  değil, proxy'nin eklediği son girdi güvenlidir); başlık yoksa 'local'. */
 function clientKey(request) {
+  const realIp = request.headers?.get('x-real-ip')
+  if (realIp && realIp.trim() !== '') return realIp.trim()
   const fwd = request.headers?.get('x-forwarded-for') ?? ''
-  return fwd.split(',')[0].trim() || 'local'
+  const parts = fwd.split(',').map(s => s.trim()).filter(s => s !== '')
+  return parts.length > 0 ? parts[parts.length - 1] : 'local'
 }
 
 /** Demo gönderimi (webhook yoksa): Discord'a HİÇBİR İSTEK atmaz, mesajı
@@ -44,7 +48,7 @@ const demoSend = async (_webhookUrl, payload) => {
   console.log(`[maho·demo] ${payload.username ? `[${payload.username}] ` : ''}${preview}`)
 }
 
-/** Çekirdek akış (demo sunucu da yeniden kullanir; test amaçlı export). */
+/** Çekirdek akış (demo sunucu da yeniden kullanır; test amaçlı export). */
 export async function sendMaho(supabase, request, opts = {}) {
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return json(400, { error: 'Geçersiz istek.' })
@@ -52,11 +56,24 @@ export async function sendMaho(supabase, request, opts = {}) {
   // Doğrulama rate limit'ten ÖNCE: hatalı deneme limit penceresi yakmasın.
   const check = validateText(body.text)
   if (!check.ok) return json(400, { error: check.error })
+  // Discord webhook'u "clyde"/"discord" içeren kullanıcı adlarını 400 ile
+  // reddeder — kullanıcı genel 502 döngüsüne takılmasın, açık 400 düşsün.
+  if (isNameForbidden(normalizeName(body.name))) {
+    return json(400, { error: 'Bu isim Discord tarafından reddedilir. Farklı bir isim dene.' })
+  }
 
   const gate = limiter.take(opts.key ?? clientKey(request))
   if (!gate.ok) {
     const secs = Math.max(1, Math.ceil(gate.retryAfterMs / 1000))
-    return json(429, { error: `Çok hızlı yazıyorsun — ${secs} saniye sonra tekrar dene.` })
+    return new Response(JSON.stringify({ error: `Çok hızlı yazıyorsun — ${secs} saniye sonra tekrar dene.` }), {
+      status: 429,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'retry-after': String(secs),
+      },
+    })
   }
 
   try {
@@ -93,9 +110,11 @@ export async function POST(request) {
     if (!webhookUrl && !demo) {
       return json(503, { error: 'DISCORD_WEBHOOK_URL tanımlı değil; uç kapalı.' })
     }
-    // Demo + webhook yok → konsol log'u gönderimi; değilse gerçek postMaho.
+    // Demo (bellek-içi depo) her koşulda dış istek ATMAZ: ortamda webhook
+    // olsa bile demo teslimat = konsol log'u (gerçek gönderim yalnız üretim
+    // ve dev:db yolundadır).
     return await sendMaho(supabase, request, {
-      ...(webhookUrl ? {} : { send: demoSend }),
+      ...(demo ? { send: demoSend } : {}),
     })
   } catch (err) {
     console.error('POST /api/maho error:', err.message)
