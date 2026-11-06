@@ -25,6 +25,9 @@ class PlayerCard extends Component {
       <button
         class="player-card"
         click={() => {
+          // Detaya geçerken ekleme formu açık kalmasın (düzenleme formunun
+          // kapanmasıyla aynı desen).
+          predictionsStore.closePlayerForm()
           leagueStore.selectPlayer(player.id)
         }}
       >
@@ -240,6 +243,40 @@ export default class PlayersPage extends Component {
           <div>
             <div class="page-meta">
               <span class="meta-main">{standings.length} oyuncu · tahminler</span>
+              {/* Oyuncu ekleme akordiyondan buraya taşındı: yönetim
+                  oyuncuların kendi ekranında. */}
+              <button class="entry-add" click={() => predictionsStore.openPlayerForm()}>+ Oyuncu</button>
+            </div>
+
+            {/* Satır içi oyuncu formu — .open CSS deseni (kural 4). */}
+            <div class={cn('entry-player-form player-add-form', predictionsStore.playerFormOpen && 'open')}>
+              <input
+                class="input"
+                type="text"
+                placeholder="Yeni oyuncu adı"
+                maxlength="40"
+                aria-label="Yeni oyuncu adı"
+                value={predictionsStore.playerForm.name}
+                input={e => predictionsStore.setPlayerName((e.target as HTMLInputElement).value)}
+              />
+              <span class="entry-colors" role="group" aria-label="Oyuncu rengi">
+                {predictionsStore.palette.map(chip => (
+                  <EditColorChip
+                    key={chip}
+                    color={chip}
+                    selected={predictionsStore.playerForm.color === chip}
+                    onSelect={() => predictionsStore.setPlayerColor(chip)}
+                  />
+                ))}
+              </span>
+              <button class="btn ghost sm" click={() => predictionsStore.closePlayerForm()}>Vazgeç</button>
+              <button
+                class="btn primary sm"
+                disabled={predictionsStore.playerSaving || predictionsStore.playerForm.name.trim().length < 2}
+                click={() => predictionsStore.createPlayer()}
+              >
+                {predictionsStore.playerSaving ? 'Ekleniyor…' : 'Ekle'}
+              </button>
             </div>
 
             <div class="players-grid">
@@ -250,7 +287,7 @@ export default class PlayersPage extends Component {
             {standings.length === 0 ? (
               <div class="empty big">
                 <div class="empty-title">Henüz oyuncu yok</div>
-                <div class="empty-sub">Maçlar sayfasında bir maç açıp '+ Oyuncu' ile ekle.</div>
+                <div class="empty-sub">Yukarıdaki '+ Oyuncu' düğmesiyle ekle.</div>
               </div>
             ) : null}
           </div>

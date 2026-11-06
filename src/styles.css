@@ -2627,6 +2627,12 @@ body.league-tsl .brand-mark {
   gap: 5px;
 }
 
+/* Oyuncular sekmesindeki ekleme formu (akordiyondan taşındı): alt ızgarayla
+ * arasına nefes. */
+.entry-player-form.player-add-form.open {
+  margin-bottom: 14px;
+}
+
 .entry-color-chip {
   width: 26px;
   height: 26px;

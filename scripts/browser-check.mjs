@@ -332,6 +332,43 @@ if (playerCards > 0) {
   await page.waitForTimeout(400)
   check('geri dönüş kart listesi', (await page.locator('.player-card').count()) === playerCards)
   check('"Benim tahminlerim" düğmesi kaldırıldı', (await page.locator('.page-meta .btn', { hasText: 'Benim tahminlerim' }).count()) === 0)
+
+  // "+ Oyuncu" akışı (akordiyondan BU ekrana taşındı): satır içi form →
+  // probe- isim → Ekle → toast → yeni kart → API temizliği.
+  await page.locator('.page-meta .entry-add').click()
+  await page.waitForTimeout(350)
+  check('oyuncu formu açılır', (await page.locator('.entry-player-form.open').count()) === 1)
+  const probeName = `probe-${Date.now().toString(36)}`
+  await page.locator('.entry-player-form input').fill(probeName)
+  await page.locator('.entry-color-chip').nth(2).click()
+  await page.locator('.entry-player-form .btn', { hasText: 'Ekle' }).click()
+  let playerToast = false
+  try {
+    await page.locator('.toast', { hasText: 'Oyuncu eklendi' }).waitFor({ timeout: 10000 })
+    playerToast = true
+  } catch {
+    playerToast = false
+  }
+  check('oyuncu ekleme toastı', playerToast)
+  await page.waitForTimeout(1500)
+  check('yeni oyuncu kartı düşer', (await page.locator('.player-card', { hasText: probeName }).count()) === 1)
+
+  // Temizlik: probe oyuncunun tahmini yoktur → DELETE /api/players ile sil.
+  const cleanup = await page.evaluate(async name => {
+    const res = await fetch('/api/league', { cache: 'no-store' })
+    const data = await res.json()
+    const player = (data.players ?? []).find(p => p.name === name)
+    if (!player) return { ok: false, why: 'oyuncu payloadda bulunamadı' }
+    const del = await fetch('/api/players', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: player.id }),
+    })
+    return { ok: del.ok, why: `HTTP ${del.status}` }
+  }, probeName)
+  check('probe oyuncu temizlenir', cleanup.ok, cleanup.why)
+  await page.waitForTimeout(600)
+
   await page.locator('.nav-item', { hasText: 'Puan' }).first().click()
   await page.waitForTimeout(500)
 }
@@ -453,7 +490,7 @@ await noOverflow('akış')
 // --- 6) Herkese açık tahmin girişi (#24 Faz 2: admin paneli kaldırıldı) ---
 // Akordiyon giriş formu: yaklaşan (başlamamış) maç satırı açılır → tüm
 // oyuncular listelenir → bir oyuncu için 1/X/2 seçilir → Kaydet → toast +
-// "girdi" rozeti. Ardından "+ Oyuncu" akışı (probe- önekli isim + temizlik).
+// "girdi" rozeti. (Oyuncu EKLEME bu formda YOK — Oyuncular sekmesinde.)
 await page.locator('.nav-item', { hasText: 'Maçlar' }).first().click()
 await page.waitForTimeout(500)
 
@@ -537,40 +574,6 @@ if (upcomingRow) {
     badgesBefore === 0 ? badgesAfter >= 1 : badgesAfter === badgesBefore + 1,
     `${badgesBefore}→${badgesAfter} rozet · ${targetName}`
   )
-
-  // "+ Oyuncu" akışı: satır içi form → probe- isim → Ekle → toast → satır.
-  await page.locator('.entry-add').click()
-  await page.waitForTimeout(350)
-  check('oyuncu formu açılır', (await page.locator('.entry-player-form.open').count()) === 1)
-  const probeName = `probe-${Date.now().toString(36)}`
-  await page.locator('.entry-player-form input').fill(probeName)
-  await page.locator('.entry-color-chip').nth(2).click()
-  await page.locator('.entry-player-form .btn', { hasText: 'Ekle' }).click()
-  let playerToast = false
-  try {
-    await page.locator('.toast', { hasText: 'Oyuncu eklendi' }).waitFor({ timeout: 10000 })
-    playerToast = true
-  } catch {
-    playerToast = false
-  }
-  check('oyuncu ekleme toastı', playerToast)
-  await page.waitForTimeout(1500)
-  check('yeni oyuncu satırı düşer', (await page.locator('.entry-row', { hasText: probeName }).count()) === 1)
-
-  // Temizlik: probe oyuncunun tahmini yoktur → DELETE /api/players ile sil.
-  const cleanup = await page.evaluate(async name => {
-    const res = await fetch('/api/league', { cache: 'no-store' })
-    const data = await res.json()
-    const player = (data.players ?? []).find(p => p.name === name)
-    if (!player) return { ok: false, why: 'oyuncu payloadda bulunamadı' }
-    const del = await fetch('/api/players', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: player.id }),
-    })
-    return { ok: del.ok, why: `HTTP ${del.status}` }
-  }, probeName)
-  check('probe oyuncu temizlenir', cleanup.ok, cleanup.why)
 
   await page.keyboard.press('Escape')
   await page.waitForTimeout(300)

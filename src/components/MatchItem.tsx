@@ -8,10 +8,11 @@
 //
 // #24 Faz 2: BAŞLAMAMIŞ (ve ertelenmemiş) maçlarda akordiyon gövdesi
 // herkese açık TAHMİN GİRİŞ FORMU olur (EntryForm): tüm aktif oyuncular
-// listelenir, kim isterse kim için olursa tahmin girer/kaldırır, satır içi
-// "+ Oyuncu" formuyla yeni oyuncu eklenir. #39: mühür kalktı — giriş
-// formundaki seçimler kayıtlı sunucu değerinden SEÇİLİ gelir; başlamış
-// maçlarda açılan tahmin satırları gösterilir.
+// listelenir, kim isterse kim için olursa tahmin girer/kaldırır. Oyuncu
+// EKLEME akordiyonda değildir — Oyuncular sekmesindeki "+ Oyuncu"
+// formundadır. #39: mühür kalktı — giriş formundaki seçimler kayıtlı
+// sunucu değerinden SEÇİLİ gelir; başlamış maçlarda açılan tahmin
+// satırları gösterilir.
 // Gea: class component'ler (kural 13 — function default + local class yasak),
 // keyed map öğeleri bileşen (kural 6), listeler doğrudan store getter'ından
 // (kural 7), map callback'i yalnız kendi prop'ları + doğrudan store okur
@@ -109,22 +110,7 @@ class EntryRow extends Component {
   }
 }
 
-/** Renk çipi (keyed map öğesi ham element olamaz — kural 6). */
-class ColorChip extends Component {
-  template({ color, selected, onSelect }: any) {
-    return (
-      <button
-        class={cn('entry-color-chip', selected && 'on')}
-        style={{ background: color } as any}
-        aria-label={`Renk ${color}`}
-        aria-pressed={selected ? 'true' : 'false'}
-        click={onSelect}
-      ></button>
-    )
-  }
-}
-
-/** Başlamamış maçın giriş formu: oyuncu satırları + "+ Oyuncu" + Kaydet. */
+/** Başlamamış maçın giriş formu: oyuncu satırları + Kaydet. */
 class EntryForm extends Component {
   template({ match }: any) {
     const dirtyCount = predictionsStore.dirtyCount(match.id)
@@ -140,41 +126,8 @@ class EntryForm extends Component {
             />
           ))}
           {leagueStore.players.length === 0 ? (
-            <div class="entry-empty">Henüz oyuncu yok — aşağıdaki düğmeden ekle.</div>
+            <div class="entry-empty">Henüz oyuncu yok — Oyuncular sekmesindeki '+ Oyuncu' ile ekle.</div>
           ) : null}
-        </div>
-
-        <button class="entry-add" click={() => predictionsStore.openPlayerForm()}>+ Oyuncu</button>
-
-        {/* Satır içi oyuncu formu — .open CSS deseni (kural 4). */}
-        <div class={cn('entry-player-form', predictionsStore.playerFormOpen && 'open')}>
-          <input
-            class="input"
-            type="text"
-            placeholder="Yeni oyuncu adı"
-            maxlength="40"
-            aria-label="Yeni oyuncu adı"
-            value={predictionsStore.playerForm.name}
-            input={e => predictionsStore.setPlayerName((e.target as HTMLInputElement).value)}
-          />
-          <span class="entry-colors" role="group" aria-label="Oyuncu rengi">
-            {predictionsStore.palette.map(chip => (
-              <ColorChip
-                key={chip}
-                color={chip}
-                selected={predictionsStore.playerForm.color === chip}
-                onSelect={() => predictionsStore.setPlayerColor(chip)}
-              />
-            ))}
-          </span>
-          <button class="btn ghost sm" click={() => predictionsStore.closePlayerForm()}>Vazgeç</button>
-          <button
-            class="btn primary sm"
-            disabled={predictionsStore.playerSaving || predictionsStore.playerForm.name.trim().length < 2}
-            click={() => predictionsStore.createPlayer()}
-          >
-            {predictionsStore.playerSaving ? 'Ekleniyor…' : 'Ekle'}
-          </button>
         </div>
 
         <div class="entry-save">

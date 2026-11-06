@@ -27,8 +27,8 @@ puan tabloları ve fikstürler lig bazlıdır.
 - Maç başladıktan sonra tahmin girilemez/değiştirilemez (API 409 ile reddeder).
 - Akordiyonda herkes her oyuncu adına giriş yapabilir (tek telefondan toplu
   giriş için); kickoff öncesi yapılan yeni kayıt eski tahminin ÜZERİNE yazar.
-- Yeni oyuncu akordiyondaki "+ Oyuncu" ile eklenir; avatar oyuncu detay
-  ekranından yüklenir.
+- Yeni oyuncu **Oyuncular sekmesindeki "+ Oyuncu"** ile eklenir; avatar oyuncu
+  detay ekranından yüklenir.
 - Puan tablosunda takım bazlı doğru sayıları (FB/GS/BJK/TS) da izlenir
   (Avrupa ligi görünümünde; Süper Lig görünümünde isabet yüzdesi vardır).
 
@@ -221,9 +221,9 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
   Ev/Beraberlik/Deplasman seçenekleriyle listelenir; kayıtlı seçimler SEÇİLİ
   gelir (başka cihazdan girilen dahil — sunucu değeri yetkili kaynaktır).
   Seçimleri yap, **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta
-  akordiyon açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"**
-  ile yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
-  "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
+  akordiyon açılan tahminleri ve puanları gösterir. Yeni oyuncu **Oyuncular
+  sekmesindeki "+ Oyuncu"** ile eklenir (isim + renk); avatar, oyuncu detay
+  ekranındaki "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
 - **/maho (gizli)**: URL ile erişilen sohbet sayfası — yazdığın mesaj anında
   Discord kanalına düşer (bkv. "Discord gece özeti" bölümündeki /maho anlatımı).
 
