@@ -45,15 +45,19 @@ const save = await api('/api/predictions', {
 })
 check('tahmin kaydı', save.status === 200, `saved=${save.json?.saved}`)
 
-// 4) Mühür: girilen tahmin public payload'da sonucu SIZMAMALI
+// 4) Açık tahmin (#39): girilen tahmin kickoff öncesi de public payload'da
+//    DEĞERİYLE görünmeli (mühür kaldırıldı; satır yine damga taşımaz).
 const league2 = await api('/api/league')
-const sealedMatch = league2.json?.matches?.find(m => m.id === picks[0]?.matchId)
-const sealedOk =
-  sealedMatch &&
-  sealedMatch.predictionsVisible === false &&
-  sealedMatch.predictionCount >= 1 &&
-  sealedMatch.predictions.every(p => !('outcome' in p))
-check('tahmin mührü', Boolean(sealedOk), `visible=${sealedMatch?.predictionsVisible}, count=${sealedMatch?.predictionCount}`)
+const openMatch = league2.json?.matches?.find(m => m.id === picks[0]?.matchId)
+const mineRow = openMatch?.predictions?.find(p => p.playerId === playerId)
+const openOk =
+  openMatch &&
+  !('predictionsVisible' in openMatch) &&
+  openMatch.predictionCount >= 1 &&
+  mineRow?.outcome === 'H' &&
+  typeof mineRow?.label === 'string' && mineRow.label.length > 0 &&
+  !('enteredAt' in (mineRow ?? {}))
+check('tahmin görünürlüğü (#39)', Boolean(openOk), `outcome=${mineRow?.outcome}, label=${mineRow?.label}, count=${openMatch?.predictionCount}`)
 
 // 5) Kilitli maça yazma → 409
 if (lockedMatch) {

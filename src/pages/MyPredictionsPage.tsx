@@ -37,7 +37,6 @@ class PlayerCard extends Component {
         </span>
         <span class="player-card-sub">%{player.accuracy} isabet</span>
         <span class="player-card-tags">
-          {stats && stats.sealed > 0 ? <span class="player-tag sealed">🔒 {stats.sealed} mühürlü</span> : null}
           {stats && stats.missing > 0 ? <span class="player-tag missing">{stats.missing} girilmedi</span> : null}
         </span>
         {stats && stats.form.length > 0 ? <FormChips form={stats.form} /> : null}
@@ -90,7 +89,6 @@ class PlayerDetail extends Component {
     const player = leagueStore.standings.find((r: any) => r.id === playerId)
     const pRow = leagueStore.players.find((p: any) => p.id === playerId)
     const matches = uiStore.playerMatches(playerId)
-    const sealed = uiStore.sealedCountOf(playerId)
     const missing = uiStore.missingMatches(playerId)
     const wrong = player ? player.played - player.correctOutcomes : 0
     const avatarRemoving = avatarStore.removingPlayerId === playerId
@@ -181,14 +179,10 @@ class PlayerDetail extends Component {
           </div>
         </div>
 
-        {sealed > 0 ? (
-          <div class="sealed-note">🔒 {sealed} tahmini mühürlü — maçlar başlayınca açılacak.</div>
-        ) : null}
-
         {matches.length === 0 ? (
           <div class="empty">
-            <div class="empty-title">Açılan tahmin yok</div>
-            <div class="empty-sub">Maçlar başlayınca tahminler burada listelenir.</div>
+            <div class="empty-title">Tahmin yok</div>
+            <div class="empty-sub">Tahmin girildikçe burada listelenir.</div>
           </div>
         ) : (
           <div class="pred-cards">

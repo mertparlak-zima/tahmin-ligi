@@ -21,8 +21,9 @@ puan tabloları ve fikstürler lig bazlıdır.
 - Tahmin = maç sonucu (ev sahibi / beraberlik / değişen). Joker yok.
 - Doğru sonuç = 1 puan (puanlar her istekte güncel kurala göre yeniden
   hesaplanır; kural tek ve sabittir, lig bazlı değildir). Bonus puan yoktur.
-- **Tahminler maç başlayana kadar mühürlüdür**: kimin tahmin girdiği görünür
-  ("girdi" rozeti), tahminin kendisi maç başlayınca açılır.
+- **Tahminler herkese açıktır (#39)**: kimin ne tahmin girdiği maç
+  başlamadan görünebilir (eski mühür 2026-11-06'da kaldırıldı); kickoff
+  öncesi seçim değiştirilebilir.
 - Maç başladıktan sonra tahmin girilemez/değiştirilemez (API 409 ile reddeder).
 - Akordiyonda herkes her oyuncu adına giriş yapabilir (tek telefondan toplu
   giriş için); kickoff öncesi yapılan yeni kayıt eski tahminin ÜZERİNE yazar.
@@ -191,7 +192,7 @@ npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
 ### Testler
 
 ```bash
-node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (oyuncu ekle/mühür/kilit/benzersizlik)
+node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (oyuncu ekle/görünürlük/kilit/benzersizlik)
 node scripts/browser-check.mjs                   # headless Chromium UI turu (akordiyon tahmin girişi dahil; yalnız localhost)
 node scripts/tests/server.test.mjs               # sunucu katmanı (offline; espn/payload/predictions/players/sync)
 node scripts/smoke-espn.mjs                      # gerçek ESPN çekimi (30 maç beklenir)
@@ -216,12 +217,12 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 - **Temalar/logolar**: her lig kendi zemin logosunu kullanır
   (`public/logos/eu.svg`, `public/logos/tsl.svg`); gerçek logoyla aynı adla
   dosyayı değiştirmek yeterlidir.
-- **Tahmin girişi (#24)**: maç kartına dokun → akordiyon açılır → oyuncular
-  Ev/Beraberlik/Deplasman seçenekleriyle listelenir (kim girdiyse "girdi"
-  rozetidir; kickoff'a kadar tahminin kendisi gizli kalır). Seçimleri yap,
-  **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta akordiyon
-  açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"** ile
-  yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
+- **Tahmin girişi (#24, #39)**: maç kartına dokun → akordiyon açılır → oyuncular
+  Ev/Beraberlik/Deplasman seçenekleriyle listelenir; kayıtlı seçimler SEÇİLİ
+  gelir (başka cihazdan girilen dahil — sunucu değeri yetkili kaynaktır).
+  Seçimleri yap, **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta
+  akordiyon açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"**
+  ile yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
   "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
 - **/maho (gizli)**: URL ile erişilen sohbet sayfası — yazdığın mesaj anında
   Discord kanalına düşer (bkv. "Discord gece özeti" bölümündeki /maho anlatımı).

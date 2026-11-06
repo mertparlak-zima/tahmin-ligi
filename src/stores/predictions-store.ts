@@ -1,17 +1,16 @@
 // Herkese açık tahmin giriş taslakları (#24 Faz 2): akordiyon içindeki
-// giriş formunun durumu. Eski admin-store'daki 'playerId:matchId' taslak
-// anahtarı düzeni korunur; şifreli uçlar yerine public uçlar çağrılır.
+// giriş formunun durumu. 'playerId:matchId' taslak anahtarı düzeni korunur;
+// şifreli uçlar yerine public uçlar çağrılır.
 //
-// MÜHÜR (seal) NOTU — baseline YOK: kickoff öncesi /api/league payload'ı
-// tahminlerin SONUCUNU gizler (yalnız kimin girdiği görünür: match.predictions
-// satırları outcome'suz gelir). Bu yüzden eski admin editöründeki gibi
-// "mevcut değerden sapma" (baseline) hesaplanamaz; taslaklar tamamen
-// EKLEMELİDİR (additive):
-//   - satırda "girdi" rozeti varsa (match.predictions'da o oyuncu var) oyuncu
-//     zaten tahmin girmiştir; yeni seçim yapıp kaydedince ÜZERİNE YAZILIR,
-//   - temizle (✕) düğmesi taslağı '' yapar; kaydedince tahmin SİLİNİR
-//     (PUT /api/predictions outcome='' = silme),
-//   - payload'dan gelen değer bilinmediğinden "eski haline döndürme" yoktur.
+// #39 BASELINE NOTU — mühür kalktı: /api/league payload'ı kickoff öncesi de
+// tahmin DEĞERİNİ (outcome) taşır. Böylece sunucudaki kayıtlı değer
+// (baseline) bilinir; taslaklar "additive" değil SAPMA temelli çalışır:
+//   - satır seçimi görüntüsü = yerel taslak VARSA taslak, YOKSA sunucu değeri
+//     (başka cihazdan girilen seçim de seçili görünür),
+//   - kirli (dirty) = taslak, sunucudaki değerden FARKLI ise (H→H no-op
+//     kayda girmez; Kaydet düğmesi ve PUT gereksiz tetiklenmez),
+//   - temizle (✕) taslağı '' yapar; kaydedince tahmin SİLİNİR
+//     (PUT /api/predictions outcome='' = silme).
 
 import { Store } from '@geajs/core'
 import leagueStore from './league-store'
@@ -44,12 +43,11 @@ function friendlyError(err: any): string {
 }
 
 class PredictionsStore extends Store {
-  /** Taslaklar: 'playerId:matchId' → 'H' | 'D' | 'A' | '' ('' = silme). */
+  /** Taslaklar: 'playerId:matchId' → 'H' | 'D' | 'A' | '' ('' = silme).
+   * Anahtar YOKSA satıra hiç dokunulmamıştır → seçim sunucu değerinden
+   * gösterilir (#39 baseline). Gea proksi güvenliği için her değişimde
+   * NESNE DEĞİŞTİREREK yazılır (spread) — ui-store toasts deseni. */
   drafts: Record<string, string> = {}
-  /** Kirli anahtarlar ('playerId:matchId'). Gea proksi güvenliği için her
-   *  değişimde NESNE DEĞİŞTİREREK yazılır (add/delete yerine spread) —
-   *  ui-store toasts deseni (kanıtlanmış yeniden render yolu). */
-  private dirty: Record<string, true> = {}
   /** Maç başına kayıt sürüyor mu (#24 T3 review: paralel maç kayıtları). */
   saving: Record<string, boolean> = {}
 
@@ -76,34 +74,39 @@ class PredictionsStore extends Store {
   setDraft(matchId: string, playerId: string, outcome: string) {
     const key = PredictionsStore.key(matchId, playerId)
     this.drafts = { ...this.drafts, [key]: outcome }
-    this.dirty = { ...this.dirty, [key]: true }
   }
 
-  clearDirty(matchId: string, playerId: string) {
-    const key = PredictionsStore.key(matchId, playerId)
-    if (!(key in this.dirty)) return
-    const next = { ...this.dirty }
-    delete next[key]
-    this.dirty = next
-  }
-
-  private clearDirtyKeys(keys: string[]) {
-    const next = { ...this.dirty }
-    for (const key of keys) delete next[key]
-    this.dirty = next
+  /** Sunucudaki kayıtlı değer (#39 baseline): kickoff öncesi de payload'dan
+   *  okunur. Satır yoksa undefined ('' ile karışmaz — '' "silinecek" demektir). */
+  savedOutcome(matchId: string, playerId: string): string | undefined {
+    const match = (leagueStore.data?.matches ?? []).find((m: any) => m.id === matchId)
+    const row = (match?.predictions ?? []).find((p: any) => p.playerId === playerId)
+    return row?.outcome ?? undefined
   }
 
   isDirty(matchId: string, playerId: string): boolean {
-    return PredictionsStore.key(matchId, playerId) in this.dirty
+    const key = PredictionsStore.key(matchId, playerId)
+    return key in this.drafts && this.drafts[key] !== this.savedOutcome(matchId, playerId)
   }
 
   /** Maçın kirli (kaydedilmemiş) satır sayısı — Kaydet düğmesi etiketi. */
   dirtyCount(matchId: string): number {
     let count = 0
-    for (const key of Object.keys(this.dirty)) {
-      if (key.slice(key.indexOf(':') + 1) === matchId) count++
+    for (const key of Object.keys(this.drafts)) {
+      if (key.slice(key.indexOf(':') + 1) !== matchId) continue
+      const playerId = key.slice(0, key.indexOf(':'))
+      if (this.isDirty(matchId, playerId)) count++
     }
     return count
+  }
+
+  /** Kayıt/silme sonrası taslak anahtarlarını düşür — satır sunucu değerine
+   *  döner (baseline). Gea proksi güvenliği: spread + delete yerine yeni nesne. */
+  private dropDraftKeys(keys: string[]) {
+    if (keys.length === 0) return
+    const next = { ...this.drafts }
+    for (const key of keys) delete next[key]
+    this.drafts = next
   }
 
   /** #24 Faz 2: tek maçın kirli taslaklarını oyuncu başına gruplayıp her
@@ -111,14 +114,16 @@ class PredictionsStore extends Store {
    *  taşır: {playerId, items:[{matchId, outcome}]}); hepsi paralel beklenir.
    *  Denetim turu (#31): OYUNCU BAŞINA sonuç toplanır — kısmi başarı artık
    *  topyekün başarısız gibi görünmez; 409'da (maç o sırada başladı) o
-   *  oyuncunun öksüz dirty anahtarı düşer; ağ hatası dostça Türkçe çıkar.
-   *  Başarı: kirli anahtarlar düşer + toast + sessiz lig tazelemesi. */
+   *  oyuncunun öksüz taslağı düşer; ağ hatası dostça Türkçe çıkar.
+   *  Başarı: taslak anahtarları düşer + toast + sessiz lig tazelemesi. */
   async saveMatch(matchId: string) {
     const byPlayer = new Map<string, Array<{ matchId: string; outcome: string }>>()
     const keysByPlayer = new Map<string, string[]>()
-    for (const key of Object.keys(this.dirty)) {
+    for (const key of Object.keys(this.drafts)) {
       if (key.slice(key.indexOf(':') + 1) !== matchId) continue
       const playerId = key.slice(0, key.indexOf(':'))
+      // #39: taslak sunucu değeriyle AYNI ise no-op — PUT'a hiç girmez.
+      if (!this.isDirty(matchId, playerId)) continue
       if (!byPlayer.has(playerId)) {
         byPlayer.set(playerId, [])
         keysByPlayer.set(playerId, [])
@@ -155,7 +160,8 @@ class PredictionsStore extends Store {
           const message = String(result.reason?.message ?? '')
           if (message.includes('Başlamış veya bitmiş')) {
             // Maç bu sırada başladı — bu taslak ARTIK kaydedilemez; öksüz
-            // dirty anahtarı düşür, kilit toast'u çıkar.
+            // taslak anahtarını düşür (satır sunucu değerine döner), kilit
+            // toast'u çıkar.
             lockedNames.push(nameOf(playerId))
             lockedKeys.push(...keys)
           } else {
@@ -164,8 +170,8 @@ class PredictionsStore extends Store {
           }
         }
       })
-      if (okKeys.length > 0) this.clearDirtyKeys(okKeys)
-      if (lockedKeys.length > 0) this.clearDirtyKeys(lockedKeys)
+      if (okKeys.length > 0) this.dropDraftKeys(okKeys)
+      if (lockedKeys.length > 0) this.dropDraftKeys(lockedKeys)
       const parts: string[] = []
       if (okKeys.length > 0) parts.push('Tahminler kaydedildi.')
       if (lockedNames.length > 0) {

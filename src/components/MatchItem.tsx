@@ -9,8 +9,9 @@
 // #24 Faz 2: BAŞLAMAMIŞ (ve ertelenmemiş) maçlarda akordiyon gövdesi
 // herkese açık TAHMİN GİRİŞ FORMU olur (EntryForm): tüm aktif oyuncular
 // listelenir, kim isterse kim için olursa tahmin girer/kaldırır, satır içi
-// "+ Oyuncu" formuyla yeni oyuncu eklenir. Başlamış maçlarda eski gösterim
-// korunur (mühür mesajı / açılan tahmin satırları).
+// "+ Oyuncu" formuyla yeni oyuncu eklenir. #39: mühür kalktı — giriş
+// formundaki seçimler kayıtlı sunucu değerinden SEÇİLİ gelir; başlamış
+// maçlarda açılan tahmin satırları gösterilir.
 // Gea: class component'ler (kural 13 — function default + local class yasak),
 // keyed map öğeleri bileşen (kural 6), listeler doğrudan store getter'ından
 // (kural 7), map callback'i yalnız kendi prop'ları + doğrudan store okur
@@ -30,18 +31,21 @@ import { cn } from '../utils/cn'
 
 /** Giriş formunun tek oyuncu satırı: avatar + isim + "girdi" rozeti +
  *  TAKIM LOGOLU segment seçici (#24 kullanıcı isteği: "FB kazanacak" tarzı
- *  etiketler + crest; 1/X/2 yerine) + temizle. Seçim durumu yalnızca
- *  predictionsStore taslaklarından okunur (mühür nedeniyle mevcut değer
- *  bilinemez — bkv. predictions-store başlık notu). */
+ *  etiketler + crest; 1/X/2 yerine) + temizle. #39: sunucudaki kayıtlı
+ *  değer (baseline) kickoff öncesi de bilinir — taslak yoksa seçim
+ *  SUNUCU değerinden gösterilir (başka cihazdan girilen de görünür). */
 class EntryRow extends Component {
   template({ player, match }: any) {
     const matchId = match.id
     const key = `${player.id}:${matchId}`
+    const hasDraft = key in predictionsStore.drafts
     const draft = predictionsStore.drafts[key] ?? ''
+    const saved = match.predictions.find((p: any) => p.playerId === player.id)?.outcome ?? ''
+    const sel = hasDraft ? draft : saved
     const dirty = predictionsStore.isDirty(matchId, player.id)
     // Denetim turu (#31, kural 9): "girdi" rozeti PARENT map gövdesinde değil
     // burada — kendi prop'undan okur, bayat kapanış riski yok.
-    const hasPick = match.predictions.some((p: any) => p.playerId === player.id)
+    const hasPick = saved !== ''
     // Kısa etiket (#24 kullanıcı isteği): "FB kazanacak" tarzı — TLA varsa
     // onu ('FEN'), yoksa kısa ad (uzun adlar CSS'te kırpılır).
     const homeTag = match.home.tla ?? match.home.short
@@ -56,31 +60,32 @@ class EntryRow extends Component {
           title={player.name}
         />
         <span class="entry-name">{player.name}</span>
-        {/* "girdi": bu oyuncunun maça zaten tahmini var (değerü mühürlü);
-            yeni seçim kaydedilince üzerine yazılır, ✕ kaydedilince silinir. */}
+        {/* "girdi": bu oyuncunun maça zaten kayıtlı tahmini var (#39: değeri
+            de seçili görünür); yeni seçim kaydedilince üzerine yazılır,
+            ✕ kaydedilince silinir. */}
         {hasPick ? <span class="entry-badge">girdi</span> : null}
         <span class="entry-seg" role="group" aria-label={`Tahmin: ${player.name}`}>
           <button
-            class={cn('entry-seg-btn team', draft === 'H' && 'on')}
+            class={cn('entry-seg-btn team', sel === 'H' && 'on')}
             title={`${match.home.name} kazanır`}
-            aria-pressed={draft === 'H' ? 'true' : 'false'}
+            aria-pressed={sel === 'H' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'H')}
           >
             <Crest name={match.home.name} short={match.home.short} crest={match.home.crest} size={14} />
             <span class="entry-seg-label">{homeTag} kazanacak</span>
           </button>
           <button
-            class={cn('entry-seg-btn draw', draft === 'D' && 'on')}
+            class={cn('entry-seg-btn draw', sel === 'D' && 'on')}
             title="Beraberlik"
-            aria-pressed={draft === 'D' ? 'true' : 'false'}
+            aria-pressed={sel === 'D' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'D')}
           >
             <span class="entry-seg-label">Beraberlik</span>
           </button>
           <button
-            class={cn('entry-seg-btn team', draft === 'A' && 'on')}
+            class={cn('entry-seg-btn team', sel === 'A' && 'on')}
             title={`${match.away.name} kazanır`}
-            aria-pressed={draft === 'A' ? 'true' : 'false'}
+            aria-pressed={sel === 'A' ? 'true' : 'false'}
             click={() => predictionsStore.setDraft(matchId, player.id, 'A')}
           >
             <Crest name={match.away.name} short={match.away.short} crest={match.away.crest} size={14} />
@@ -94,7 +99,7 @@ class EntryRow extends Component {
           aria-label={`${player.name} tahminini temizle`}
           title="Tahmini temizle (kaydedince silinir)"
           click={() => {
-            if (draft !== '' || hasPick) predictionsStore.setDraft(matchId, player.id, '')
+            if (sel !== '' || hasPick) predictionsStore.setDraft(matchId, player.id, '')
           }}
         >
           ✕
@@ -224,7 +229,7 @@ export default class MatchItem extends Component {
               <div class="match-acc-empty">Maç başladı — tahmin girişi kilitlendi. Veriler tazelenince tahminler açılır.</div>
             ) : match.predictions.length === 0 ? (
               <div class="match-acc-empty">Bu maça tahmin girilmemiş.</div>
-            ) : match.predictionsVisible ? (
+            ) : (
               <div class="match-acc-list">
                 {match.predictions.map((pred: any) => (
                   <PredRow key={pred.playerId} pred={pred} isLive={match.isLive} />
@@ -235,22 +240,6 @@ export default class MatchItem extends Component {
                     <span><i class="dot miss"></i>Yanlış</span>
                   </div>
                 ) : null}
-              </div>
-            ) : (
-              <div class="match-acc-sealed">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="4" y="11" width="16" height="10" rx="2" />
-                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                </svg>
-                <div>
-                  <div class="match-acc-sealed-title">Tahminler maç başlayınca açılır</div>
-                  <div class="match-acc-sealed-sub">Şu ana kadar {match.predictionCount} tahmin girildi.</div>
-                  <div class="pred-sealed-avatars">
-                    {match.predictions.map((p: any) => (
-                      <Avatar key={p.playerId} color={p.color} initials={p.initials} size="sm" title={p.name} />
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
           </div>

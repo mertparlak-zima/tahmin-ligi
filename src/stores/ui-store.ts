@@ -73,32 +73,22 @@ class UiStore extends Store {
   // #24: setIdentity/openIdentityModal/closeIdentityModal ve identityModalOpen
   // kaldırıldı (kimlik akışı yok); "identity" getter'ı da kullanımsızlaştı.
 
-  /** Oyuncunun açılmış tahminleri: bitmişler (yeniden eskiye) + başlamışlar (yakına). */
+  /** Oyuncunun tahminli maçları (#39: hepsi açık): bitmişler (yeniden eskiye)
+   *  + bitmemişler (yakına — başlamışlar ve girilmiş gelecek maçlar dahil). */
   playerMatches(playerId: string): any[] {
     if (!playerId) return []
     const matches: any[] = leagueStore.data?.matches ?? []
     const mine = matches.filter(m => m.predictions.some((p: any) => p.playerId === playerId))
-    const revealed = mine.filter(m => m.predictionsVisible)
-    const finished = revealed
+    const finished = mine
       .filter(m => m.isFinished)
       .sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
-    const started = revealed
+    const rest = mine
       .filter(m => !m.isFinished)
       .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
-    return [...finished, ...started]
+    return [...finished, ...rest]
   }
 
-  /** Oyuncunun mühürlü (henüz açılmamış) tahmin sayısı. */
-  sealedCountOf(playerId: string): number {
-    if (!playerId) return 0
-    const matches: any[] = leagueStore.data?.matches ?? []
-    return matches.filter(
-      m => !m.predictionsVisible && m.predictions.some((p: any) => p.playerId === playerId)
-    ).length
-  }
-
-  /** Oyuncunun tahmin GİRMEDİĞİ bitmemiş maçlar (#20 U8) — kimin girmediği
-   *  herkese açık bilgidir; outcome söz konusu değildir (mühürle çelişmez). */
+  /** Oyuncunun tahmin GİRMEDİĞİ bitmemiş maçlar (#20 U8). */
   missingMatches(playerId: string): any[] {
     if (!playerId) return []
     const matches: any[] = leagueStore.data?.matches ?? []

@@ -272,7 +272,7 @@ async function seedTslDemo(supabase) {
   await supabase.from('matches').upsert(matches, { onConflict: 'provider,external_id' })
 
   // Tahminler: bitmişlerde karışık doğruluk, canlıda bir giriş, geleceklerde
-  // her maça en az bir tahmin (prune koruması) — mühür akışı da görünür.
+  // her maça en az bir tahmin (prune koruması) — açık tahmin akışı da görünür.
   const [a, b, c] = active
   const predictions = [
     { player_id: a.id, match_id: 'demo-tsl-1', outcome: 'H' }, // doğru (3-1)
@@ -281,7 +281,7 @@ async function seedTslDemo(supabase) {
     { player_id: a.id, match_id: 'demo-tsl-3', outcome: 'H' }, // doğru (2-0)
     { player_id: c?.id ?? a.id, match_id: 'demo-tsl-3', outcome: 'D' }, // yanlış
     { player_id: b.id, match_id: 'demo-tsl-4', outcome: 'H' }, // canlı → açılır, puan null
-    { player_id: a.id, match_id: 'demo-tsl-5', outcome: 'H' }, // gelecek → mühürlü
+    { player_id: a.id, match_id: 'demo-tsl-5', outcome: 'H' }, // gelecek → değer açık (#39)
     { player_id: b.id, match_id: 'demo-tsl-6', outcome: 'A' },
     { player_id: c?.id ?? a.id, match_id: 'demo-tsl-7', outcome: 'D' },
     { player_id: a.id, match_id: 'demo-tsl-7', outcome: 'H' },
@@ -363,7 +363,6 @@ async function handleApi(request) {
       target.isStarted = true
       target.statusGroup = 'live'
       target.minute = 67
-      target.predictionsVisible = true
     }
     console.log(`GET /api/league → 200 fake-stale (${Date.now() - started} ms)`)
     return new Response(JSON.stringify(payload), {

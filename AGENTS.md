@@ -129,8 +129,10 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
   Script'ler `--env-file=.env` ile çalışır. `SUPABASE_SERVICE_ROLE_KEY` yalnız
   server'da (api/) kullanılır; istemciye asla sızmaz.
 - **UI dili Türkçe**; hata mesajları kullanıcı dostu olmalı.
-- **Tahmin mührü**: kickoff geçene kadar tahmin sonucu API seviyesinde gizli
-  (kimin tahmin girdiği görünür). Bu kural UI'a değil API'ye ait.
+- **Tahmin görünürlüğü (#39)**: tahmin değeri (H/D/A) kickoff ÖNCESİ de
+  herkese açıktır — eski mühür (değer gizleme) 2026-11-06 sahibi kararıyla
+  kaldırıldı. Akordiyondaki giriş formu kayıtlı seçimleri seçili gösterir
+  (sunucu değeri yetkili kaynak; yerel taslak yalnız sapmayı taşır).
 - **Senkron**: cron yok; `/api/league` bayat veriyi görünce ESPN'den çeker.
   Bitmiş maç geri alınmaz; kaynak hatasında eski veri korunur.
 - **Yeni lig**: `lib/targets.js` içindeki `LEAGUES` kayıt defterine kayıt
@@ -142,8 +144,9 @@ Sürüm: @geajs/core 1.5.1 + vite-plugin 1.5.0. Repro:
 - **Yönetim paneli yoktur (#24)**: tahmin girişi maç akordiyonundaki herkese
   açık formdadir (`PUT /api/predictions`); oyuncu ekleme/avatar de uçlar
   herkese açıktır. Erişim güvenliği Vercel Deployment Protection'a dayanır —
-  README'deki güvenlik notuna bak. Mühür ve kilit kuralları API'de zorunlu
-  kalır; bunları gevşeten değişiklik ASLA yapılmaz.
+  README'deki güvenlik notuna bak. Kickoff sonrası kilit kuralı (başlamış/bitmiş
+  maça yazım 409) API'de zorunlu kalır; bunu gevşeten değişiklik ASLA yapılmaz
+  (mühür kuralı ise #39 ile bilinçli olarak kaldırıldı).
 - **Gea skill'leri** `.agents/skills/` altında; yeni Gea kodu yazmadan
   `gea-framework` skill'ini oku.
 - **CI ve Runner**: Tüm CI koşuları (`ci.yml`) GitHub-hosted yerine yerel self-hosted Docker runner (`tahmin-ligi-docker-1`, label `[self-hosted, linux, x64, docker, tahmin-ligi]`, `infra/runner/compose.yml`, başlatma `scripts/start-ci-runner.ps1`) üzerinde çalışır. GitHub-hosted runner kullanımı yasaktır.

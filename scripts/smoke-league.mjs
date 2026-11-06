@@ -82,16 +82,16 @@ const matches = [
 const predictions = [
   { player_id: 'p1', match_id: 'm1', outcome: 'H', created_at: iso(now - 50 * hour), updated_at: iso(now - 50 * hour) }, // yanlış (A kazandı)
   { player_id: 'p1', match_id: 'm2', outcome: 'H', created_at: iso(now - 52 * hour), updated_at: iso(now - 30 * hour) }, // doğru → 1 puan (sonra güncellendi)
-  { player_id: 'p1', match_id: 'm3', outcome: 'H', created_at: iso(now - 20 * hour), updated_at: iso(now - 20 * hour) }, // gelecek → mühürlü
+  { player_id: 'p1', match_id: 'm3', outcome: 'H', created_at: iso(now - 20 * hour), updated_at: iso(now - 20 * hour) }, // gelecek → değer açık (#39)
   { player_id: 'p2', match_id: 'm1', outcome: 'A', created_at: iso(now - 49 * hour), updated_at: iso(now - 49 * hour) }, // doğru → 1 puan
   { player_id: 'p2', match_id: 'm2', outcome: 'D', created_at: iso(now - 51 * hour), updated_at: iso(now - 12 * hour) }, // yanlış (güncellendi)
   { player_id: 'p3', match_id: 'm1', outcome: 'A', created_at: iso(now - 48 * hour), updated_at: iso(now - 48 * hour) }, // pasif oyuncu → sayılmamalı
   { player_id: 'p4', match_id: 'm1', outcome: 'A', created_at: iso(now - 47 * hour), updated_at: iso(now - 47 * hour) }, // doğru → 1 puan (bonus yok, #24)
-  // #21 TSL tahminleri: t1 GS kazanır (H), t3 beraberlik (D), t2 gelecek → mühürlü.
+  // #21 TSL tahminleri: t1 GS kazanır (H), t3 beraberlik (D), t2 gelecek → değer açık.
   { player_id: 'p1', match_id: 't1', outcome: 'H', created_at: iso(now - 46 * hour), updated_at: iso(now - 46 * hour) }, // doğru → TSL 1 puan
   { player_id: 'p1', match_id: 't3', outcome: 'D', created_at: iso(now - 22 * hour), updated_at: iso(now - 22 * hour) }, // doğru → TSL 1 puan
   { player_id: 'p2', match_id: 't1', outcome: 'A', created_at: iso(now - 45 * hour), updated_at: iso(now - 45 * hour) }, // yanlış
-  { player_id: 'p2', match_id: 't2', outcome: 'H', created_at: iso(now - 10 * hour), updated_at: iso(now - 10 * hour) }, // gelecek → mühürlü
+  { player_id: 'p2', match_id: 't2', outcome: 'H', created_at: iso(now - 10 * hour), updated_at: iso(now - 10 * hour) }, // gelecek → değer açık
   { player_id: 'p4', match_id: 't1', outcome: 'A', created_at: iso(now - 44 * hour), updated_at: iso(now - 44 * hour) }, // yanlış (EU bonusu TSL'e sızmaz)
 ]
 
@@ -141,23 +141,25 @@ assert.equal(payload.meta.counts.finished, 2)
 assert.equal(payload.players.length, 3, 'pasif oyuncu listede olmamalı (3 aktif: Ogün, Mert, Bonuslu)')
 assert.deepEqual(payload.competitions.map(c => c.code), ['CL', 'EL', 'UECL'], 'EU competitions lig kapsamında')
 
-// --- Mühür ---
+// --- Açık tahmin (#39: mühür kaldırıldı) ---
 const future = payload.matches.find(m => m.id === 'm3')
-assert.equal(future.predictionsVisible, false, 'gelecek maç mühürlü olmalı')
+assert.equal('predictionsVisible' in future, false, 'predictionsVisible alanı kaldırıldı (#39)')
 assert.equal(future.predictionCount, 1, 'tahmin sayısı herkese açık')
-const sealedPred = future.predictions[0]
-assert.equal(sealedPred.outcome, undefined, 'mühürlü tahminin sonucu sızmamalı')
-assert.equal(sealedPred.name, 'Ogün', 'kimin tahmin yaptığı görünür')
+const futurePred = future.predictions[0]
+assert.equal(futurePred.outcome, 'H', 'gelecek maçta da tahmin DEĞERİ görünür')
+assert.equal(futurePred.label, 'Trabzonspor yener', 'etiket kickoff öncesi de taşınır')
+assert.equal(futurePred.name, 'Ogün', 'kimin tahmin yaptığı görünür')
+assert.equal(futurePred.points, null, 'puan maç bitene kadar null')
+assert.equal(futurePred.correct, null)
 // U9 (#20 diyet): damga satırda DEĞİL — meta.recentPredictions olaylarında.
-assert.equal(sealedPred.enteredAt, undefined, 'satır damga taşımaz')
+assert.equal(futurePred.enteredAt, undefined, 'satır damga taşımaz')
 const ev = payload.recentPredictions.find(r => r.matchId === 'm3')
-assert.ok(ev, 'mühürlü maçın girişi akış olaylarında')
-assert.equal(ev.playerId, sealedPred.playerId)
+assert.ok(ev, 'gelecek maçın girişi akış olaylarında')
+assert.equal(ev.playerId, futurePred.playerId)
 assert.equal(ev.enteredAt, iso(now - 20 * hour), 'giriş zamanı olayda taşınır')
 assert.equal('outcome' in ev, false, 'olayda outcome YOK')
 
 const past = payload.matches.find(m => m.id === 'm1')
-assert.equal(past.predictionsVisible, true)
 
 // --- Puanlama (EU) ---
 const ogun = payload.standings.find(r => r.id === 'p1')
@@ -193,10 +195,10 @@ assert.deepEqual(tslPayload.competitions, [{ code: 'TSL', name: 'Süper Lig' }],
 assert.equal(tslPayload.meta.counts.matches, 3)
 assert.equal(tslPayload.meta.counts.finished, 2)
 
-const tslSealed = tslPayload.matches.find(m => m.id === 't2').predictions[0]
-assert.equal(tslPayload.matches.find(m => m.id === 't2').predictionsVisible, false, 'TSL gelecek maçı da mühürlü')
-assert.equal(tslSealed.outcome, undefined)
-assert.equal(tslSealed.name, 'Mert')
+const tslFuture = tslPayload.matches.find(m => m.id === 't2').predictions[0]
+assert.equal('predictionsVisible' in tslPayload.matches.find(m => m.id === 't2'), false, 'TSL predictionsVisible alanı da kaldırıldı')
+assert.equal(tslFuture.outcome, 'H', 'TSL gelecek maçında da değer görünür (#39)')
+assert.equal(tslFuture.name, 'Mert')
 
 const tOgun = tslPayload.standings.find(r => r.id === 'p1')
 const tMert = tslPayload.standings.find(r => r.id === 'p2')
