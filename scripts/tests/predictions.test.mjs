@@ -110,6 +110,96 @@ suite.test('boş outcome siler, dolu upsert eder', async () => {
   assert.equal(sup.store.predictions[0].outcome, 'A', 'upsert üzerine yazar')
 })
 
+// --- İşlem Geçmişi olayları (#40): PUT denetim satırı yazar ---
+
+const callWithMeta = (sup, body) => {
+  const req = new Request('http://localhost:8787/api/predictions', {
+    method: 'PUT',
+    body: JSON.stringify(body ?? {}),
+    headers: {
+      'content-type': 'application/json',
+      'x-forwarded-for': '1.1.1.1, 85.110.56.201',
+      'x-vercel-ip-city': '%C4%B0stanbul',
+      'x-vercel-ip-country': 'TR',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/140.0',
+    },
+  })
+  req.supabase = sup
+  return PUT(req)
+}
+
+suite.test('#40 olaylar: ilk giriş CREATE, değişim UPDATE, no-op YAZILMAZ, silme DELETE', async () => {
+  const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
+
+  // 1) İlk giriş → CREATE.
+  await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open', outcome: 'H' }] })
+  assert.equal(sup.store.prediction_events.length, 1)
+  let ev = sup.store.prediction_events[0]
+  assert.equal(ev.player_id, 'p1')
+  assert.equal(ev.action, 'CREATE')
+  assert.equal(ev.new_outcome, 'H')
+  assert.equal(ev.ip, '85.110.56.201', 'XFF son girdi')
+  assert.equal(ev.ip_city, 'İstanbul')
+  assert.equal(ev.user_agent.includes('Chrome/140.0'), true)
+
+  // 2) Aynı değer → no-op, olay YOK.
+  await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open', outcome: 'H' }] })
+  assert.equal(sup.store.prediction_events.length, 1, 'H→H olay üretmez')
+
+  // 3) Değişim → UPDATE (H→D).
+  await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open', outcome: 'D' }] })
+  assert.equal(sup.store.prediction_events.length, 2)
+  ev = sup.store.prediction_events[1]
+  assert.equal(ev.player_id, 'p1')
+  assert.equal(ev.action, 'UPDATE')
+  assert.equal(ev.old_outcome, 'H')
+  assert.equal(ev.new_outcome, 'D')
+
+  // 4) Silme → DELETE.
+  await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open', outcome: '' }] })
+  assert.equal(sup.store.prediction_events.length, 3)
+  ev = sup.store.prediction_events[2]
+  assert.equal(ev.player_id, 'p1')
+  assert.equal(ev.action, 'DELETE')
+  assert.equal(ev.old_outcome, 'D')
+
+  // 5) Olmayanı silme → no-op.
+  await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open2', outcome: '' }] })
+  assert.equal(sup.store.prediction_events.length, 3, 'hayalet silme olay üretmez')
+})
+
+suite.test('#40 olaylar: kilitli batch 409 verir → olay da YAZILMAZ', async () => {
+  const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
+  const res = await callWithMeta(sup, {
+    playerId: 'p1',
+    items: [{ matchId: 'm-live', outcome: 'A' }],
+  })
+  assert.equal(res.status, 409)
+  assert.equal(sup.store.prediction_events.length, 0)
+})
+
+suite.test('#40 olaylar: tablo yoksa (migration öncesi) PUT yine 200', async () => {
+  const sup = createMemorySupabase({ players: basePlayers(), matches: baseMatches(Date.now()) })
+  // Tabloyu "kaldır": insert patlasın — best-effort akışı ölçülür.
+  const realInsert = sup.store.prediction_events
+  sup.store.prediction_events = undefined
+  // store.prediction_events undefined → Query exec tabloyu [] olarak yeniden
+  // yaratır; gerçek hata yolunu zorlamak için from'u sarmalayalım:
+  const realFrom = sup.from.bind(sup)
+  sup.from = table => {
+    const q = realFrom(table)
+    if (table !== 'prediction_events') return q
+    return {
+      ...q,
+      insert: async () => ({ data: null, error: { message: 'relation "prediction_events" does not exist' } }),
+    }
+  }
+  const res = await callWithMeta(sup, { playerId: 'p1', items: [{ matchId: 'm-open', outcome: 'H' }] })
+  assert.equal(res.status, 200, 'tahmin kaydı birincil — olay hatası tasiri yok')
+  assert.equal(sup.store.predictions.length, 1)
+  sup.store.prediction_events = realInsert
+})
+
 // --- kilit kuralı (KORUNUR #24) ---
 
 suite.test('kilitli maç → 409 VE batch\'in hiçbiri yazılmaz (atomik)', async () => {

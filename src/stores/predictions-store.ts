@@ -15,6 +15,7 @@
 import { Store } from '@geajs/core'
 import leagueStore from './league-store'
 import uiStore from './ui-store'
+import eventsStore from './events-store'
 
 /** api/players.js PLAYER_COLORS ile aynı palet (ilk renk varsayılan). */
 const PLAYER_COLORS = ['#b8f34a', '#5ce1e6', '#ff9f68', '#ffd05c', '#c792ea', '#f78fb3', '#39dfb2', '#6db6ff']
@@ -182,6 +183,8 @@ class PredictionsStore extends Store {
       }
       uiStore.toast(parts.join(' '), failedNames.length > 0 || lockedNames.length > 0 ? 5200 : 2600)
       if (okKeys.length > 0 || lockedKeys.length > 0) leagueStore.load(true)
+      // #40: kayıt denetim olayı üretti → İşlem Geçmişi'ni sessiz tazele.
+      if (okKeys.length > 0) eventsStore.refresh()
     } finally {
       const next = { ...this.saving }
       delete next[matchId]

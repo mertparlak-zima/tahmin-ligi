@@ -154,6 +154,13 @@ tablosu). Kod önce deploy edilirse mesajlar Discord'a GİDER ama moderasyon
 kaydı düşmez (`stored:false` log'lanır); migration sonrası kendi kendine
 düzelir — veri kaybı yoktur, yalnız o aradaki mesajlar kayıtsız kalır.
 
+**Migration deploy sırası (#40):** İşlem Geçmişi kodu canlıya çıkmadan ÖNCE
+`supabase/migrations/2026-11-prediction-events.sql` çalıştırılmalıdır
+(`prediction_events` tablosu + `created_at desc` indeksi). Kod önce deploy
+edilirse tahmin yazımı çalışmaya DEVAM EDER (best-effort; olay kaydı sessizce
+atlanır), ancak `/api/events` ve "İşlem Geçmişi" sekmesi 503 verir; migration
+sonrası olaylar birikmeye başlar (backfill yoktur).
+
 ### Vercel
 
 1. Projeyi Vercel'e bağla (Vite otomatik algılanır).
@@ -226,6 +233,10 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
   ekranındaki "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
 - **/maho (gizli)**: URL ile erişilen sohbet sayfası — yazdığın mesaj anında
   Discord kanalına düşer (bkv. "Discord gece özeti" bölümündeki /maho anlatımı).
+- **İşlem Geçmişi (#40)**: Akış sekmesinin yanındaki 5. sekme — tüm tahmin hareketlerini
+  (ilk giriş, değişim, kaldırma) kronolojik listeler; kimin hangi maç için neyi neyle
+  değiştirdiği, zamanı, maskeli IP'si (`85.110.••.••`) ve şehri görünür. **☰** butonuyla
+  genişleyen detay panelinde cihaz/tarayıcı/OS parse özeti, tam User-Agent ve tam zaman damgası açılır.
 
 ## API
 
@@ -235,6 +246,7 @@ Protection ile sınırlıdır.
 | Yöntem | Yol | Açıklama |
 | --- | --- | --- |
 | `GET` | `/api/league?league=EU\|TSL` | Herkese açık lig verisi (lazy sync dahil; lig varsayılanı EU) |
+| `GET` | `/api/events?limit=1..200` | İşlem Geçmişi: son tahmin hareketleri (oyuncu+maç join'li, maskeli IP; tam IP payload'a girmez) |
 | `PUT` | `/api/predictions` | Tahmin kaydet/sil (batch, atomic; başlamış maçta 409) |
 | `POST` | `/api/players` | Oyuncu ekle (isim 2-40, küçük-harf benzersizlik, renk) |
 | `PATCH` | `/api/players` | Oyuncu güncelle (ad/renk/aktif) |
@@ -256,8 +268,8 @@ public/logos/   Lig zemin logoları (eu.svg, tsl.svg — aynı adla değiştiril
 supabase/       Veritabanı şeması + migrations
 scripts/        Duman testleri
 src/
-  stores/       league-store (veri+polling), ui-store, predictions-store, avatar-store, maho-store
-  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş, maho (gizli)
+  stores/       league-store (veri+polling), ui-store, predictions-store, events-store, avatar-store, maho-store
+  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş (Akış), İşlem Geçmişi, maho (gizli)
   components/   DateStrip, MatchRow, MatchSheet, StandingsTable, Podium, ...
 ```
 
@@ -283,9 +295,10 @@ node --env-file=.env scripts/restore-predictions.mjs backups/<dosya>.json       
 
 Yedek dosyaları `backups/` altına tarih damgalı JSON olarak yazılır ve
 `.gitignore` kapsamındadır (commit'e girmez). İçerik: oyuncular (tüm sütunlar),
-tahminler (tüm sütunlar) ve `app_config` satırları (puanlama kuralı, sezonluk
-bonuslar). Geri yükleme idempotent upsert'tir; hiçbir satır silinmez, tahminin
-geri gelmesi için bağlı maçın DB'de mevcut olması yeterlidir.
+tahminler (tüm sütunlar), işlem geçmişi (`prediction_events` denetim olayları) ve
+`app_config` satırları (puanlama kuralı, sezonluk bonuslar). Geri yükleme idempotent
+upsert'tir; hiçbir satır silinmez, tahminin geri gelmesi için bağlı maçın DB'de mevcut
+olması yeterlidir.
 
 Ne zaman alınmalı: büyük değişikliklerden önce ve büyük maç haftalarının
 sonunda. `app_config` tablosundaki `last_backup` damgasını

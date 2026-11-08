@@ -84,6 +84,19 @@ const del = await api('/api/predictions', {
 })
 check('tahmin silme', del.status === 200, `deleted=${del.json?.deleted}`)
 
+// 7b) #40 İşlem Geçmişi: PUT /api/predictions olay üretir → GET /api/events
+const eventsRes = await api('/api/events?limit=30')
+// Not: migration öncesi 503 toleransı; tablo varsa 200 döner.
+const eventsOk = eventsRes.status === 200 || eventsRes.status === 503
+check('GET /api/events yanıtı', eventsOk, `status=${eventsRes.status}`)
+if (eventsRes.status === 200) {
+  const events = eventsRes.json?.events ?? []
+  const hasPlayerEvent = events.some(e => e.player?.id === playerId)
+  check('olay geçmişinde test oyuncusu var', hasPlayerEvent)
+  const rawJson = JSON.stringify(eventsRes.json)
+  check('tam IP sızmaz (yalnız ipMasked)', !rawJson.includes('"ip":'))
+}
+
 // 8) Test oyuncusunu GERÇEKTEN sil — önce kalan tahmini temizle
 //    (picks[0]'a girilen H hâlâ duruyor), sonra sil.
 const delPreds = await api('/api/predictions', {

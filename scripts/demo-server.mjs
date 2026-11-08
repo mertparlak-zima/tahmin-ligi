@@ -18,6 +18,7 @@ import { buildLeaguePayload } from '../lib/league.js'
 import { seasonYear } from '../lib/espn.js'
 import { GET as leagueGET } from '../api/league.js'
 import { GET as notifyGET } from '../api/notify.js'
+import { GET as eventsGET } from '../api/events.js'
 import { POST as mahoPOST } from '../api/maho.js'
 import { savePredictions } from '../api/predictions.js'
 import { createPlayer, updatePlayer, deletePlayer } from '../api/players.js'
@@ -116,6 +117,11 @@ class Query {
     return this
   }
 
+  limit(n) {
+    this.limitN = n
+    return this
+  }
+
   then(resolve, reject) {
     return Promise.resolve(this.exec()).then(resolve, reject)
   }
@@ -142,16 +148,21 @@ class Query {
         const { col, asc } = this.orderSpec
         rows.sort((a, b) => String(a[col]).localeCompare(String(b[col]), 'tr') * (asc ? 1 : -1))
       }
+      if (this.limitN != null) rows = rows.slice(0, this.limitN)
       if (this.selectOpts?.head) return { data: null, count: source.length, error: null }
       if (this.mode) return { data: rows[0] ?? null, error: null }
       return { data: rows, error: null }
     }
 
     if (this.op === 'insert') {
-      const row = { id: randomUUID(), ...this.pendingInsert }
-      table.push(row)
-      this.inserted = [row]
-      if (this.mode) return { data: clone(row), error: null }
+      // #40: insert dizi de alabilir (prediction_events gibi toplu olaylar).
+      const incoming = Array.isArray(this.pendingInsert) ? this.pendingInsert : [this.pendingInsert]
+      for (const one of incoming) {
+        const row = { id: randomUUID(), ...one }
+        table.push(row)
+        this.inserted = [row]
+      }
+      if (this.mode) return { data: clone(this.inserted?.[0] ?? null), error: null }
       return { data: null, error: null }
     }
 
@@ -193,6 +204,8 @@ function createMemorySupabase() {
     match_notifications: [],
     // /maho: Discord'a iletilen manuel mesajların moderasyon kaydı.
     manual_messages: [],
+    // #40 İşlem Geçmişi: tahmin hareketlerinin denetim kaydı.
+    prediction_events: [],
     app_config: [
       { key: 'scoring', value: { label: 'Doğru sonuç 1 puan', status: 'provisional', correctOutcome: 1 } },
     ],
@@ -398,6 +411,18 @@ async function handleApi(request) {
     return res
   }
 
+  // #40 İşlem Geçmişi ucu — demo deposu enjekte edilir (migration gerekmez).
+  if (method === 'GET' && pathname === '/api/events') {
+    const webReq = new Request(`http://localhost:${PORT}${request.url}`, {
+      method: 'GET',
+      headers: request.headers,
+    })
+    webReq.supabase = supabase
+    const res = await eventsGET(webReq)
+    console.log(`GET /api/events → ${res.status}`)
+    return res
+  }
+
   const webReq = toWebRequest(request, await readBody(request).catch(() => ({})))
   const route = `${method} ${pathname}`
 
@@ -482,6 +507,28 @@ server.listen(PORT, () => {
       const seeded = await seedTslDemo(supabase)
       if (seeded > 0) {
         console.log(`  TSL demo     : 7 Süper Lig maçı + ${seeded} tahmin tohumlandı (DEMO_TSL_SEED)`)
+      }
+      // #40 İşlem Geçmişi: tohumlu turda sayfa dolu gelsin diye birkaç örnek
+      // olay (maskeli IP demosu + gerçekçi hareket çeşitleri).
+      const { data: tslRows } = await supabase.from('matches').select('id').eq('league', 'TSL')
+      const { data: demoPlayers } = await supabase.from('players').select('id')
+      const tslIds = (tslRows ?? []).map(m => m.id)
+      const playerIds = (demoPlayers ?? []).map(p => p.id)
+      if (tslIds.length >= 2 && playerIds.length >= 2) {
+        const demoMeta = {
+          ip: '203.0.113.42',
+          ip_city: 'İstanbul',
+          ip_country: 'TR',
+          ip_region: '34',
+          user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+        }
+        const base = Date.now() - 90 * 60_000
+        await supabase.from('prediction_events').insert([
+          { player_id: playerIds[0], match_id: tslIds[0], action: 'CREATE', old_outcome: null, new_outcome: 'H', ...demoMeta, created_at: new Date(base).toISOString() },
+          { player_id: playerIds[1], match_id: tslIds[1], action: 'CREATE', old_outcome: null, new_outcome: 'A', ...demoMeta, created_at: new Date(base + 60_000).toISOString() },
+          { player_id: playerIds[1], match_id: tslIds[1], action: 'UPDATE', old_outcome: 'A', new_outcome: 'D', ...demoMeta, created_at: new Date(base + 150_000).toISOString() },
+        ])
+        console.log('  İşlem Geçmişi: 3 örnek olay tohumlandı')
       }
       // DEV_FAKE_ARCHIVE=1: geçmiş sezon UI akışını uçtan uca denemek için
       // ilk 8 maçın kopyasını yapma sezonuna (2025) taşır — yalnız bellekte.

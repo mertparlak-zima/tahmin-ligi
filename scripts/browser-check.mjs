@@ -433,6 +433,19 @@ if ((await tslSegment.count()) > 0) {
   await page.waitForTimeout(700)
   check('TSL kupalar seçici gizli', (await page.locator('.filter-bar .comp-select').count()) === 0)
 
+  // Maçlı bir gün seç: önceki adımlardan seçili gün TSL maçsız bir tarihte kalmış olabilir.
+  if ((await page.locator('.match-row').count()) === 0) {
+    if ((await page.locator('.cal-compact-label').count()) > 0) {
+      await page.locator('.cal-compact-label').click()
+      await page.waitForTimeout(400)
+    }
+    const tslChipCell = page.locator('.cal-cell').filter({ has: page.locator('.cal-chip') }).first()
+    if ((await tslChipCell.count()) > 0) {
+      await tslChipCell.click()
+      await page.waitForTimeout(450)
+    }
+  }
+
   // #21 UI: Süper Lig maç kartında "N. Hafta" çipi (ESPN week=null →
   // istemci türevi; rozet yerine geçer).
   const weekChips = await page.locator('.match-row .week-chip').count()
@@ -486,6 +499,25 @@ check('akış sayfası', (await page.locator('.flow-page, .empty').count()) > 0)
 const flowEvents = await page.locator('.flow-event').count()
 check('akış olayları render', flowEvents > 0, `${flowEvents} olay`)
 await noOverflow('akış')
+
+// --- 5b) #40 İşlem Geçmişi sekmesi ---
+await page.locator('.nav-item', { hasText: 'İşlem Geçmişi' }).first().click()
+await page.waitForTimeout(600)
+check('işlem geçmişi sayfası', (await page.locator('.activity-page, .empty').count()) > 0)
+const activityRows = await page.locator('.activity-row').count()
+check('işlem geçmişi satırları render', activityRows > 0, `${activityRows} satır`)
+if (activityRows > 0) {
+  const firstRow = page.locator('.activity-row').first()
+  await firstRow.locator('.activity-expand').click()
+  await page.waitForTimeout(300)
+  check('işlem geçmişi detay paneli açılır', (await page.locator('.activity-row.open .activity-detail').count()) === 1)
+  const uaText = String((await page.locator('.activity-row.open .activity-ua').textContent()) ?? '').trim()
+  check('User-Agent detayda görünür', uaText.length > 0, uaText.slice(0, 30))
+  await firstRow.locator('.activity-expand').click()
+  await page.waitForTimeout(200)
+  check('işlem geçmişi detay paneli kapanır', (await page.locator('.activity-row.open').count()) === 0)
+}
+await noOverflow('işlem geçmişi')
 
 // --- 6) Herkese açık tahmin girişi (#24 Faz 2: admin paneli kaldırıldı) ---
 // Akordiyon giriş formu: yaklaşan (başlamamış) maç satırı açılır → tüm

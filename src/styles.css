@@ -2995,4 +2995,184 @@ body.league-tsl .brand-mark {
   overflow-wrap: anywhere;
 }
 
+/* ---------- İşlem Geçmişi (#40) ---------- */
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.activity-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Satır ana hattı: zaman · oyuncu · maç · olay · meta · ☰ (taşarsa sarar). */
+.activity-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  min-height: 44px;
+}
+
+.activity-row.open .activity-main {
+  border-bottom: 1px solid var(--line);
+}
+
+.activity-time {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.activity-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.activity-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.activity-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(109, 182, 255, 0.12);
+  color: var(--blue);
+}
+
+.activity-action b {
+  font-weight: 800;
+}
+
+.activity-action.create {
+  background: rgba(184, 243, 74, 0.13);
+  color: var(--accent);
+}
+
+.activity-action.update {
+  background: rgba(255, 208, 92, 0.13);
+  color: #d9a514;
+}
+
+.activity-action.delete {
+  background: rgba(255, 120, 117, 0.13);
+  color: #f2726f;
+}
+
+.activity-arrow {
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.activity-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.activity-ip {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.activity-expand {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.activity-expand:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.activity-row.open .activity-expand {
+  color: var(--text);
+  transform: rotate(90deg);
+}
+
+/* Detay paneli — .open CSS görünürlük deseni (AGENTS kural 4). */
+.activity-detail {
+  display: none;
+}
+
+.activity-detail.open {
+  display: block;
+}
+
+.activity-row.open .activity-detail {
+  display: block;
+}
+
+.activity-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  padding: 12px 14px 6px;
+}
+
+.activity-detail-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.activity-detail-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.activity-ua-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 14px 12px;
+}
+
+.activity-ua {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: rgba(127, 127, 127, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+
 
