@@ -21,13 +21,14 @@ puan tabloları ve fikstürler lig bazlıdır.
 - Tahmin = maç sonucu (ev sahibi / beraberlik / değişen). Joker yok.
 - Doğru sonuç = 1 puan (puanlar her istekte güncel kurala göre yeniden
   hesaplanır; kural tek ve sabittir, lig bazlı değildir). Bonus puan yoktur.
-- **Tahminler maç başlayana kadar mühürlüdür**: kimin tahmin girdiği görünür
-  ("girdi" rozeti), tahminin kendisi maç başlayınca açılır.
+- **Tahminler herkese açıktır (#39)**: kimin ne tahmin girdiği maç
+  başlamadan görünebilir (eski mühür 2026-11-06'da kaldırıldı); kickoff
+  öncesi seçim değiştirilebilir.
 - Maç başladıktan sonra tahmin girilemez/değiştirilemez (API 409 ile reddeder).
 - Akordiyonda herkes her oyuncu adına giriş yapabilir (tek telefondan toplu
   giriş için); kickoff öncesi yapılan yeni kayıt eski tahminin ÜZERİNE yazar.
-- Yeni oyuncu akordiyondaki "+ Oyuncu" ile eklenir; avatar oyuncu detay
-  ekranından yüklenir.
+- Yeni oyuncu **Oyuncular sekmesindeki "+ Oyuncu"** ile eklenir; avatar oyuncu
+  detay ekranından yüklenir.
 - Puan tablosunda takım bazlı doğru sayıları (FB/GS/BJK/TS) da izlenir
   (Avrupa ligi görünümünde; Süper Lig görünümünde isabet yüzdesi vardır).
 
@@ -153,6 +154,13 @@ tablosu). Kod önce deploy edilirse mesajlar Discord'a GİDER ama moderasyon
 kaydı düşmez (`stored:false` log'lanır); migration sonrası kendi kendine
 düzelir — veri kaybı yoktur, yalnız o aradaki mesajlar kayıtsız kalır.
 
+**Migration deploy sırası (#40):** İşlem Geçmişi kodu canlıya çıkmadan ÖNCE
+`supabase/migrations/2026-11-prediction-events.sql` çalıştırılmalıdır
+(`prediction_events` tablosu + `created_at desc` indeksi). Kod önce deploy
+edilirse tahmin yazımı çalışmaya DEVAM EDER (best-effort; olay kaydı sessizce
+atlanır), ancak `/api/events` ve "İşlem Geçmişi" sekmesi 503 verir; migration
+sonrası olaylar birikmeye başlar (backfill yoktur).
+
 ### Vercel
 
 1. Projeyi Vercel'e bağla (Vite otomatik algılanır).
@@ -191,7 +199,7 @@ npm run check:db          # Supabase bağlantı/şema/senkron doğrulaması
 ### Testler
 
 ```bash
-node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (oyuncu ekle/mühür/kilit/benzersizlik)
+node --env-file=.env scripts/e2e-local.mjs      # API uçtan uca (oyuncu ekle/görünürlük/kilit/benzersizlik)
 node scripts/browser-check.mjs                   # headless Chromium UI turu (akordiyon tahmin girişi dahil; yalnız localhost)
 node scripts/tests/server.test.mjs               # sunucu katmanı (offline; espn/payload/predictions/players/sync)
 node scripts/smoke-espn.mjs                      # gerçek ESPN çekimi (30 maç beklenir)
@@ -216,15 +224,19 @@ bildirilecek framework bug'ları için `docs/gea-upstream-bugs.md`.
 - **Temalar/logolar**: her lig kendi zemin logosunu kullanır
   (`public/logos/eu.svg`, `public/logos/tsl.svg`); gerçek logoyla aynı adla
   dosyayı değiştirmek yeterlidir.
-- **Tahmin girişi (#24)**: maç kartına dokun → akordiyon açılır → oyuncular
-  Ev/Beraberlik/Deplasman seçenekleriyle listelenir (kim girdiyse "girdi"
-  rozetidir; kickoff'a kadar tahminin kendisi gizli kalır). Seçimleri yap,
-  **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta akordiyon
-  açılan tahminleri ve puanları gösterir. Akordiyondaki **"+ Oyuncu"** ile
-  yeni oyuncu eklenir (isim + renk). Avatar, oyuncu detay ekranındaki
-  "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
+- **Tahmin girişi (#24, #39)**: maç kartına dokun → akordiyon açılır → oyuncular
+  Ev/Beraberlik/Deplasman seçenekleriyle listelenir; kayıtlı seçimler SEÇİLİ
+  gelir (başka cihazdan girilen dahil — sunucu değeri yetkili kaynaktır).
+  Seçimleri yap, **Kaydet** — yalnız dokunulan satırlar gider. Başlamış maçta
+  akordiyon açılan tahminleri ve puanları gösterir. Yeni oyuncu **Oyuncular
+  sekmesindeki "+ Oyuncu"** ile eklenir (isim + renk); avatar, oyuncu detay
+  ekranındaki "Fotoğraf yükle/değiştir" ile yüklenir (kırpma dahil).
 - **/maho (gizli)**: URL ile erişilen sohbet sayfası — yazdığın mesaj anında
   Discord kanalına düşer (bkv. "Discord gece özeti" bölümündeki /maho anlatımı).
+- **İşlem Geçmişi (#40)**: Akış sekmesinin yanındaki 5. sekme — tüm tahmin hareketlerini
+  (ilk giriş, değişim, kaldırma) kronolojik listeler; kimin hangi maç için neyi neyle
+  değiştirdiği, zamanı, maskeli IP'si (`85.110.••.••`) ve şehri görünür. **☰** butonuyla
+  genişleyen detay panelinde cihaz/tarayıcı/OS parse özeti, tam User-Agent ve tam zaman damgası açılır.
 
 ## API
 
@@ -234,6 +246,7 @@ Protection ile sınırlıdır.
 | Yöntem | Yol | Açıklama |
 | --- | --- | --- |
 | `GET` | `/api/league?league=EU\|TSL` | Herkese açık lig verisi (lazy sync dahil; lig varsayılanı EU) |
+| `GET` | `/api/events?limit=1..200` | İşlem Geçmişi: son tahmin hareketleri (oyuncu+maç join'li, maskeli IP; tam IP payload'a girmez) |
 | `PUT` | `/api/predictions` | Tahmin kaydet/sil (batch, atomic; başlamış maçta 409) |
 | `POST` | `/api/players` | Oyuncu ekle (isim 2-40, küçük-harf benzersizlik, renk) |
 | `PATCH` | `/api/players` | Oyuncu güncelle (ad/renk/aktif) |
@@ -255,8 +268,8 @@ public/logos/   Lig zemin logoları (eu.svg, tsl.svg — aynı adla değiştiril
 supabase/       Veritabanı şeması + migrations
 scripts/        Duman testleri
 src/
-  stores/       league-store (veri+polling), ui-store, predictions-store, avatar-store, maho-store
-  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş, maho (gizli)
+  stores/       league-store (veri+polling), ui-store, predictions-store, events-store, avatar-store, maho-store
+  pages/        Maçlar, Puan Durumu, Tahminlerim, Geçmiş (Akış), İşlem Geçmişi, maho (gizli)
   components/   DateStrip, MatchRow, MatchSheet, StandingsTable, Podium, ...
 ```
 
@@ -282,9 +295,10 @@ node --env-file=.env scripts/restore-predictions.mjs backups/<dosya>.json       
 
 Yedek dosyaları `backups/` altına tarih damgalı JSON olarak yazılır ve
 `.gitignore` kapsamındadır (commit'e girmez). İçerik: oyuncular (tüm sütunlar),
-tahminler (tüm sütunlar) ve `app_config` satırları (puanlama kuralı, sezonluk
-bonuslar). Geri yükleme idempotent upsert'tir; hiçbir satır silinmez, tahminin
-geri gelmesi için bağlı maçın DB'de mevcut olması yeterlidir.
+tahminler (tüm sütunlar), işlem geçmişi (`prediction_events` denetim olayları) ve
+`app_config` satırları (puanlama kuralı, sezonluk bonuslar). Geri yükleme idempotent
+upsert'tir; hiçbir satır silinmez, tahminin geri gelmesi için bağlı maçın DB'de mevcut
+olması yeterlidir.
 
 Ne zaman alınmalı: büyük değişikliklerden önce ve büyük maç haftalarının
 sonunda. `app_config` tablosundaki `last_backup` damgasını

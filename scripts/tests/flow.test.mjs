@@ -1,4 +1,4 @@
-// G · utils/flow.js testleri — akış türetimi (mühür, sıralama, limit).
+// G · utils/flow.js testleri — akış türetimi (sıralama, limit).
 
 import assert from 'node:assert/strict'
 import { buildFlowEvents } from '../../src/utils/flow.js'
@@ -16,7 +16,7 @@ const players = [
 const matches = [
   {
     id: 'm1', competitionCode: 'CL', kickoff: iso(now - 90 * hour), isFinished: true,
-    statusGroup: 'finished', predictionsVisible: true,
+    statusGroup: 'finished',
     home: { short: 'Galatasaray' }, away: { short: 'Barcelona' },
     score: { home: 1, away: 4 },
     predictions: [
@@ -26,13 +26,13 @@ const matches = [
   },
   {
     id: 'm2', competitionCode: 'UECL', kickoff: iso(now + 24 * hour), isFinished: false,
-    statusGroup: 'upcoming', predictionsVisible: false,
+    statusGroup: 'upcoming',
     home: { short: 'KuPS' }, away: { short: 'Trabzonspor' },
     predictions: [{ playerId: 'p2' }],
   },
   {
     id: 'm3', competitionCode: 'EL', kickoff: iso(now - 200 * hour), isFinished: false,
-    statusGroup: 'inactive', predictionsVisible: false,
+    statusGroup: 'inactive',
     home: { short: 'Beşiktaş' }, away: { short: 'Lyon' },
     predictions: [{ playerId: 'p1' }],
   },

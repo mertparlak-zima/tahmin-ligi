@@ -45,15 +45,19 @@ const save = await api('/api/predictions', {
 })
 check('tahmin kaydı', save.status === 200, `saved=${save.json?.saved}`)
 
-// 4) Mühür: girilen tahmin public payload'da sonucu SIZMAMALI
+// 4) Açık tahmin (#39): girilen tahmin kickoff öncesi de public payload'da
+//    DEĞERİYLE görünmeli (mühür kaldırıldı; satır yine damga taşımaz).
 const league2 = await api('/api/league')
-const sealedMatch = league2.json?.matches?.find(m => m.id === picks[0]?.matchId)
-const sealedOk =
-  sealedMatch &&
-  sealedMatch.predictionsVisible === false &&
-  sealedMatch.predictionCount >= 1 &&
-  sealedMatch.predictions.every(p => !('outcome' in p))
-check('tahmin mührü', Boolean(sealedOk), `visible=${sealedMatch?.predictionsVisible}, count=${sealedMatch?.predictionCount}`)
+const openMatch = league2.json?.matches?.find(m => m.id === picks[0]?.matchId)
+const mineRow = openMatch?.predictions?.find(p => p.playerId === playerId)
+const openOk =
+  openMatch &&
+  !('predictionsVisible' in openMatch) &&
+  openMatch.predictionCount >= 1 &&
+  mineRow?.outcome === 'H' &&
+  typeof mineRow?.label === 'string' && mineRow.label.length > 0 &&
+  !('enteredAt' in (mineRow ?? {}))
+check('tahmin görünürlüğü (#39)', Boolean(openOk), `outcome=${mineRow?.outcome}, label=${mineRow?.label}, count=${openMatch?.predictionCount}`)
 
 // 5) Kilitli maça yazma → 409
 if (lockedMatch) {
@@ -79,6 +83,19 @@ const del = await api('/api/predictions', {
   body: { playerId, items: [{ matchId: picks[1].matchId, outcome: '' }] },
 })
 check('tahmin silme', del.status === 200, `deleted=${del.json?.deleted}`)
+
+// 7b) #40 İşlem Geçmişi: PUT /api/predictions olay üretir → GET /api/events
+const eventsRes = await api('/api/events?limit=30')
+// Not: migration öncesi 503 toleransı; tablo varsa 200 döner.
+const eventsOk = eventsRes.status === 200 || eventsRes.status === 503
+check('GET /api/events yanıtı', eventsOk, `status=${eventsRes.status}`)
+if (eventsRes.status === 200) {
+  const events = eventsRes.json?.events ?? []
+  const hasPlayerEvent = events.some(e => e.player?.id === playerId)
+  check('olay geçmişinde test oyuncusu var', hasPlayerEvent)
+  const rawJson = JSON.stringify(eventsRes.json)
+  check('tam IP sızmaz (yalnız ipMasked)', !rawJson.includes('"ip":'))
+}
 
 // 8) Test oyuncusunu GERÇEKTEN sil — önce kalan tahmini temizle
 //    (picks[0]'a girilen H hâlâ duruyor), sonra sil.

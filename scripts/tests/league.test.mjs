@@ -1,4 +1,4 @@
-// C · lib/league.js testleri — mühür kuralları, puan durumu, meta.
+// C · lib/league.js testleri — açık tahmin kuralları (#39), puan durumu, meta.
 
 import assert from 'node:assert/strict'
 import { buildLeaguePayload, seasonLabel } from '../../lib/league.js'
@@ -16,9 +16,9 @@ const labelOf = y => seasonLabel(y)
 // m1 GS 1-4 BAR (bitti, A kazandı)      -96h
 // m2 FB 2-1 GS derbi (bitti, H kazandı)  -72h
 // m6 TS 2-0 KuPS (bitti, H kazandı)      -48h
-// m5 GS - BJK POSTPONED (geçmişta!)       -2h  → mühürlü kalmalı
-// m3 BJK 1-0 MAR IN_PLAY 55'              -1h  → açılmış, puan null
-// m4 FB - Lyon TIMED                     +24h  → mühürlü
+// m5 GS - BJK POSTPONED (geçmişta!)       -2h  → değer açık, puan null
+// m3 BJK 1-0 MAR IN_PLAY 55'              -1h  → değer açık, puan null
+// m4 FB - Lyon TIMED                     +24h  → değer açık (#39)
 
 const row = o => ({
   provider: 'espn',
@@ -87,7 +87,7 @@ const mainPredictions = [
   { player_id: 'p1', match_id: 'm2', outcome: 'H' }, // doğru (derbi)
   { player_id: 'p1', match_id: 'm6', outcome: 'H' }, // doğru
   { player_id: 'p1', match_id: 'm3', outcome: 'H' }, // canlı → görünüyor
-  // U9: gelecek (mühürlü) maç — damgalar taşınır, outcome taşımaz;
+  // U9: gelecek maç — damgalar taşınır, outcome satırda da açık (#39);
   // updated_at > created_at → akışta "güncelledi" ayrımı için senaryo.
   {
     player_id: 'p1', match_id: 'm4', outcome: 'H',
@@ -96,7 +96,7 @@ const mainPredictions = [
   { player_id: 'p2', match_id: 'm1', outcome: 'A' }, // doğru
   { player_id: 'p2', match_id: 'm2', outcome: 'D' }, // yanlış
   { player_id: 'p2', match_id: 'm3', outcome: 'D' }, // canlı
-  { player_id: 'p2', match_id: 'm5', outcome: 'A' }, // ertelenmiş → mühürlü kalmalı
+  { player_id: 'p2', match_id: 'm5', outcome: 'A' }, // ertelenmiş → değer açık
   { player_id: 'p3', match_id: 'm1', outcome: 'A' }, // pasif → hiçbir yerde görünmemeli
   // U9: bitmiş maç — created_at == updated_at → akışta "girdi" senaryosu.
   {
@@ -129,33 +129,30 @@ suite.test('senaryo payload\'ı kuruluyor', async () => {
   assert.ok(payload, 'payload üretildi')
 })
 
-suite.test('mühür: gelecek TIMED maçta tahmin yalnız "kim" olarak görünür', () => {
+suite.test('açık tahmin (#39): gelecek TIMED maçta değer + etiket görünür, puan null', () => {
   const m4 = payload.matches.find(m => m.id === 'm4')
-  assert.equal(m4.predictionsVisible, false)
+  assert.equal('predictionsVisible' in m4, false, 'predictionsVisible alanı kaldırıldı')
   assert.equal(m4.isStarted, false)
   assert.equal(m4.statusGroup, 'upcoming')
   assert.equal(m4.predictionCount, 1, 'tahmin sayısı herkese açık')
   assert.equal(m4.predictions.length, 1)
-  const sealed = m4.predictions[0]
-  assert.equal(sealed.playerId, 'p1')
-  assert.equal(sealed.name, 'Ogün')
-  assert.equal(sealed.initials, 'O')
-  assert.equal(sealed.color, '#b8f34a')
-  // U9: tahmin satırı damga TAŞIMAZ (yalnız meta.recentPredictions'ta; payload
-  // diyeti). Sealed satırda outcome/label/points/correct HÂLÂ YOK.
-  assert.deepEqual(
-    Object.keys(sealed).sort(),
-    ['avatarUrl', 'color', 'initials', 'name', 'playerId'],
-    'mühürlü satırda outcome/label/points/correct/enteredAt OLMAMALI',
-  )
-  assert.equal(sealed.outcome, undefined, 'outcome HÂLÂ sızmamalı')
-  assert.equal(sealed.enteredAt, undefined, 'damga satırdan taşınmaz (#20 diyet)')
+  const open = m4.predictions[0]
+  assert.equal(open.playerId, 'p1')
+  assert.equal(open.name, 'Ogün')
+  assert.equal(open.initials, 'O')
+  assert.equal(open.color, '#b8f34a')
+  // #39: mühür kalktı — kickoff öncesi de outcome/label taşınır; puan/correct
+  // maç bitene kadar null. Damga satırda HÂLÂ yok (#20 diyeti korunur).
+  assert.equal(open.outcome, 'H', 'gelecek maçta da tahmin değeri görünür')
+  assert.equal(open.label, 'Fenerbahçe yener')
+  assert.equal(open.points, null, 'gelecek maçta puan null')
+  assert.equal(open.correct, null)
+  assert.equal(open.enteredAt, undefined, 'damga satırdan taşınmaz (#20 diyeti)')
   assert.equal(m4.score, null)
 })
 
-suite.test('mühür: başlamış IN_PLAY maçta tahmin açılır, puan bitene kadar null', () => {
+suite.test('açık tahmin (#39): başlamış IN_PLAY maçta puan bitene kadar null', () => {
   const m3 = payload.matches.find(m => m.id === 'm3')
-  assert.equal(m3.predictionsVisible, true)
   assert.equal(m3.isLive, true)
   assert.equal(m3.minute, 55)
   assert.deepEqual(m3.score, { home: 1, away: 0 })
@@ -169,17 +166,17 @@ suite.test('mühür: başlamış IN_PLAY maçta tahmin açılır, puan bitene ka
   assert.equal(byId.p2.points, null)
 })
 
-suite.test('mühür: geçmişte ertelenen maç SEALED kalır (kickoff geçmiş olsa bile)', () => {
+suite.test('açık tahmin (#39): ertelenen maçta da değer görünür (puan yine null)', () => {
   const m5 = payload.matches.find(m => m.id === 'm5')
   assert.equal(m5.isStarted, true, 'kickoff geçti')
   assert.equal(m5.statusGroup, 'inactive')
-  assert.equal(m5.predictionsVisible, false, 'POSTPONED oynanana kadar mühürlü')
   assert.equal(m5.predictionCount, 1)
-  const sealed = m5.predictions[0]
-  assert.equal(sealed.playerId, 'p2')
-  assert.equal(sealed.outcome, undefined)
-  assert.equal(sealed.label, undefined)
-  assert.equal(sealed.points, undefined)
+  const open = m5.predictions[0]
+  assert.equal(open.playerId, 'p2')
+  assert.equal(open.outcome, 'A', 'ertelenmiş maçta da değer görünür')
+  assert.equal(open.label, 'Beşiktaş yener')
+  assert.equal(open.points, null, 'oynanmadıkça puan null')
+  assert.equal(open.correct, null)
 })
 
 suite.test('bitmiş maçta puan/etiket/doğruluk dolu gelir', () => {
@@ -199,7 +196,7 @@ suite.test('bitmiş maçta puan/etiket/doğruluk dolu gelir', () => {
   assert.equal(ogun.label, 'Galatasaray yener')
 })
 
-suite.test('recentPredictions (U9): akış olayları — outcome yok, mühürlü maç dahil, updated desc', () => {
+suite.test('recentPredictions (U9): akış olayları — outcome yok, gelecek maç dahil, updated desc', () => {
   const recent = payload.recentPredictions
   assert.ok(Array.isArray(recent) && recent.length >= 2, 'en az iki damgalı olay')
   for (const r of recent) {
@@ -209,8 +206,8 @@ suite.test('recentPredictions (U9): akış olayları — outcome yok, mühürlü
       'olay yalnız kim+maç+damga taşır',
     )
   }
-  // En yeni olay: p1'in MÜHÜRLÜ (gelecek) m4 tahmininin güncellemesi —
-  // outcome olayda zaten yok; akış "güncelledi" olarak gösterebilir.
+  // En yeni olay: p1'in gelecek m4 tahmininin güncellemesi —
+  // outcome olayda yok; akış "güncelledi" olarak gösterebilir.
   assert.equal(recent[0].playerId, 'p1')
   assert.equal(recent[0].matchId, 'm4')
   assert.equal(recent[0].enteredAt, iso(now - 30 * hour))
@@ -254,7 +251,7 @@ suite.test('avatarUrl: players/standings/tahmin satırlarında taşınır (null 
   const mert = m1.predictions.find(p => p.playerId === 'p2')
   assert.equal(mert.avatarUrl, null)
 
-  // mühürlü gelecek maçta da kim satırı avatarUrl ile gelir
+  // gelecek maçta da kim satırı avatarUrl ile gelir
   const m4 = payload.matches.find(m => m.id === 'm4')
   assert.equal(m4.predictions[0].avatarUrl, avatar1)
 })

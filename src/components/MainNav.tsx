@@ -42,6 +42,15 @@ export default function MainNav() {
         </span>
         <span class="nav-label">Akış</span>
       </Link>
+      <Link to="/islem-gecmisi" class="nav-item">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 6h13M8 12h13M8 18h13" />
+            <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke-width="2.4" />
+          </svg>
+        </span>
+        <span class="nav-label">İşlem Geçmişi</span>
+      </Link>
     </nav>
   )
 }

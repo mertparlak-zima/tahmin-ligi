@@ -41,6 +41,12 @@ async function fetchAll(table, orders = []) {
 
 const players = await fetchAll('players', ['name'])
 const predictions = await fetchAll('predictions', ['player_id', 'match_id'])
+// #40 İşlem Geçmişi: denetim olayları da elle üretilen veridir — yedeğe girer.
+// Migration uygulanmamış DB'de yedek PATLAMAZ; tablo yoksa sessizce atlanır
+// (fetchAll process.exit yapar — o yüzden burada toleranslı özel okuma).
+const eventsRes = await supabase.from('prediction_events').select('*').order('id').range(0, 999)
+const predictionEvents = eventsRes.error ? [] : (eventsRes.data ?? [])
+if (eventsRes.error) console.log(`- prediction_events atlandı: ${eventsRes.error.message}`)
 const appConfig = await fetchAll('app_config', ['key'])
 
 const now = new Date()
@@ -54,10 +60,12 @@ const backup = {
     generatedAt,
     playerCount: players.length,
     predictionCount: predictions.length,
+    predictionEventCount: predictionEvents.length,
     appConfigKeys,
   },
   players,
   predictions,
+  predictionEvents,
   appConfig,
 }
 
@@ -85,6 +93,7 @@ if (stampError) {
 
 console.log(`✓ oyuncular: ${players.length}`)
 console.log(`✓ tahminler: ${predictions.length}`)
+console.log(`✓ işlem geçmişi: ${predictionEvents.length}`)
 console.log(`✓ app_config: ${appConfig.length} anahtar (${appConfigKeys.join(', ')})`)
 console.log(`Yedek alındı: ${filePath}`)
 console.log('✓ app_config.last_backup damgası güncellendi')

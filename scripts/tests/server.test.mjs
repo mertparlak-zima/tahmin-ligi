@@ -14,9 +14,10 @@ import { suite as calendarSuite } from './calendar.test.mjs'
 import { suite as flowSuite } from './flow.test.mjs'
 import { suite as notifySuite } from './notify.test.mjs'
 import { suite as mahoSuite } from './maho.test.mjs'
+import { suite as eventsSuite } from './events.test.mjs'
 
 const results = []
-for (const suite of [espnSuite, targetsSuite, leagueSuite, predictionsSuite, playersSuite, syncSuite, calendarSuite, flowSuite, notifySuite, mahoSuite]) {
+for (const suite of [espnSuite, targetsSuite, leagueSuite, predictionsSuite, playersSuite, syncSuite, calendarSuite, flowSuite, notifySuite, mahoSuite, eventsSuite]) {
   results.push(await suite.run())
 }
 

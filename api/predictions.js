@@ -7,6 +7,7 @@
 
 import { getSupabase, isReadonly } from '../lib/supabase.js'
 import { isLocked } from '../lib/status.js'
+import { recordPredictionEvents } from '../lib/events.js'
 
 const READONLY_MSG = 'Salt-okunur mod: SUPABASE_SERVICE_ROLE_KEY tanımlı değil. Yazma işlemleri için .env dosyasına ekleyin.'
 
@@ -23,7 +24,7 @@ const json = (status, body) =>
 /** Çekirdek mantık (demo sunucu da yeniden kullanır; test amaçlı export).
  * Gövde: {playerId, items:[{matchId, outcome}]} — outcome '' = silme.
  * Doğrulama → oyuncu/maç kontrolü → kilit kontrolü (yazma ÖNCESİ, atomik)
- * → upsert + delete. */
+ * → eski değer okuma (#40) → upsert + delete → denetim olayları (best-effort). */
 export async function savePredictions(supabase, request) {
   const body = await request.json().catch(() => null)
   const playerId = body?.playerId
@@ -70,6 +71,16 @@ export async function savePredictions(supabase, request) {
     }
   }
 
+  // #40 İşlem Geçmişi: eski değerleri yazma ÖNCESİ oku (upsert üstüne
+  // yazar — sonra okursak UPDATE/CREATE ayrımı kaybolur). Satır yoksa
+  // haritada anahtar olmaz (no-op/silme ayrımı deriveEvents'te).
+  const { data: existingRows } = await supabase
+    .from('predictions')
+    .select('match_id, outcome')
+    .eq('player_id', playerId)
+    .in('match_id', matchIds)
+  const oldByMatch = new Map((existingRows ?? []).map(r => [r.match_id, r.outcome]))
+
   // NOT (#24 T3 review): kilit denetimi tüm yazmalardan ÖNCE gelir (kilitli
   // maçla karışık batch asla yazılmaz). Yazım aşaması ise iki ayrı ifadedir
   // (upsert + delete): silme başarısız olursa batch yarı kalabilir — 500
@@ -98,6 +109,13 @@ export async function savePredictions(supabase, request) {
       console.error('savePredictions delete:', error.message)
       return json(500, { error: 'Tahminler silinemedi.' })
     }
+  }
+
+  // #40: yazma başarılı → denetim olayları (best-effort; hata tahmin kaydını
+  // bozmaz). Olaylar migrate edilmemiş tabloda sessizce düşer (deployment
+  // sırası toleransı) — yalnız log.
+  if (upserts.length > 0 || deletes.length > 0) {
+    await recordPredictionEvents(supabase, request, { items, oldByMatch, playerId })
   }
 
   return json(200, { ok: true, saved: upserts.length, deleted: deletes.length, player: player.name })

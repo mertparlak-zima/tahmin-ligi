@@ -9,7 +9,7 @@ import { buildLeaguePayload } from '../lib/league.js'
 const supabase = getSupabase()
 
 // 1) Tablolar var mı?
-const tables = ['players', 'matches', 'predictions', 'app_config', 'sync_state']
+const tables = ['players', 'matches', 'predictions', 'app_config', 'sync_state', 'prediction_events']
 for (const table of tables) {
   const { error } = await supabase.from(table).select('*').limit(1)
   if (error) {

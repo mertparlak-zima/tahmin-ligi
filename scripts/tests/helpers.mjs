@@ -155,6 +155,11 @@ class Query {
     return this
   }
 
+  limit(n) {
+    this.limitN = n
+    return this
+  }
+
   then(resolve, reject) {
     return Promise.resolve(this.exec()).then(resolve, reject)
   }
@@ -188,12 +193,17 @@ class Query {
     }
 
     if (this.op === 'insert') {
-      const err = uniqueError(this.pendingInsert)
-      if (err) return { data: null, error: err }
-      const defaults = COLUMN_DEFAULTS[this.table] ?? {}
-      const row = { id: randomUUID(), ...defaults, ...this.pendingInsert }
-      table.push(row)
-      if (this.mode) return { data: clone(row), error: null }
+      // #40: insert dizi de alabilir (prediction_events gibi toplu olaylar).
+      const incoming = Array.isArray(this.pendingInsert) ? this.pendingInsert : [this.pendingInsert]
+      let lastRow = null
+      for (const one of incoming) {
+        const err = uniqueError(one)
+        if (err) return { data: null, error: err }
+        const defaults = COLUMN_DEFAULTS[this.table] ?? {}
+        lastRow = { id: randomUUID(), ...defaults, ...one }
+        table.push(lastRow)
+      }
+      if (this.mode) return { data: clone(lastRow), error: null }
       return { data: null, error: null }
     }
 
@@ -239,6 +249,7 @@ class Query {
       const { col, asc } = this.orderSpec
       rows.sort((a, b) => String(a[col]).localeCompare(String(b[col]), 'tr') * (asc ? 1 : -1))
     }
+    if (this.limitN != null) rows = rows.slice(0, this.limitN)
     if (this.selectOpts?.head) return { data: null, count: source.length, error: null }
     if (this.mode === 'single') {
       if (rows.length !== 1) {
@@ -271,6 +282,8 @@ export function createMemorySupabase(seed = {}, opts = {}) {
     players: clone(seed.players ?? []),
     matches: clone(seed.matches ?? []),
     predictions: clone(seed.predictions ?? []),
+    // #40 İşlem Geçmişi denetim olayları
+    prediction_events: clone(seed.prediction_events ?? []),
     // #29 gece özeti: gönderilen maç flag'leri.
     match_notifications: clone(seed.match_notifications ?? []),
     // /maho: Discord'a iletilen manuel mesajların moderasyon kaydı.

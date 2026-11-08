@@ -805,15 +805,14 @@ class LeagueStore extends Store {
     return this.staleInfo.level !== 'none'
   }
 
-  /** Oyuncu kartları için tahmin durumu özeti (#20 U8 + E4):
-   *  sealed = mühürlü girilen, missing = bitmemiş ama girilmemiş,
-   *  form = son 5 bitmiş tahminin G/M dizisi (payload'dan ücretsiz türetim). */
-  get playerPredictionStats(): Record<string, { sealed: number; missing: number; form: string[] }> {
+  /** Oyuncu kartları için tahmin durumu özeti (#20 U8 + E4, #39):
+   *  missing = bitmemiş ama girilmemiş, form = son 5 bitmiş tahminin G/M
+   *  dizisi (payload'dan ücretsiz türetim). */
+  get playerPredictionStats(): Record<string, { missing: number; form: string[] }> {
     const players = this.data?.players ?? []
     const matches = this.data?.matches ?? []
-    const out: Record<string, { sealed: number; missing: number; form: string[] }> = {}
+    const out: Record<string, { missing: number; form: string[] }> = {}
     for (const p of players) {
-      let sealed = 0
       let missing = 0
       const form: string[] = []
       for (const m of matches) {
@@ -822,19 +821,15 @@ class LeagueStore extends Store {
           if (!m.isStarted && !m.isFinished && m.statusGroup !== 'inactive') missing++
           continue
         }
-        if (!m.predictionsVisible) {
-          sealed++
-          continue
-        }
         if (m.isFinished && pred.correct === true) form.push('G')
         else if (m.isFinished && pred.correct === false) form.push('M')
       }
-      out[p.id] = { sealed, missing, form: form.slice(-5) }
+      out[p.id] = { missing, form: form.slice(-5) }
     }
     return out
   }
 
-  /** Akış olayları (#20 U9): son tahmin girişleri (mühürlü) + sonuçlar. */
+  /** Akış olayları (#20 U9): son tahmin girişleri (kim+maç+damga) + sonuçlar. */
   get flowEvents(): any[] {
     const data = this.data
     if (!data) return []

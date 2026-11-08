@@ -1,7 +1,7 @@
 // Akış (#20 U9): tahmin girişi/güncelleme + sonuç olaylarını türetir.
-// SAF katman — DOM/store erşimi yok; Node'dan test edilir (calendar.js deseni).
-// MÜHRÜN DEMİR KURALI: burada outcome HİÇBİR ŞEKİLDE türetilemez/taşınmaz —
-// yalnız "kim, hangi maça, ne zaman girdi/güncelledi" bilgisi akar.
+// SAF katman — DOM/store erişimi yok; Node'dan test edilir (calendar.js deseni).
+// #39 sonrası mühür yok; bu akış YİNE de yalnız "kim, hangi maça, ne zaman
+// girdi/güncelledi" taşır — tahmin değeri İşlem Geçmişi'nde (#40) gösterilir.
 
 /** events: [{ id, type, at, matchId, compCode, teams, kickoff, ... }] desc, ilk `limit`. */
 export function buildFlowEvents({ recentPredictions = [], matches = [], players = [], limit = 30, now = Date.now() }) {
