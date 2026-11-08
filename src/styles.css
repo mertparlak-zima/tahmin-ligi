@@ -1213,27 +1213,7 @@ body.league-tsl .brand-mark {
   color: var(--muted);
 }
 
-.match-acc-sealed {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  padding: 14px;
-  color: var(--gold);
-}
-
-.match-acc-sealed-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 3px;
-}
-
-.match-acc-sealed-sub {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* Denetim turu (#31): .detail-mode-toggle (#12'den kalma) ölü — kaldırıldı. */
+/* Denetim turu (#31, #39): .detail-mode-toggle (#12) ve .match-acc-sealed* (#39) ölü — kaldırıldı. */
 
 /* ---------- Armut ---------- */
 
@@ -1519,15 +1499,6 @@ body.league-tsl .brand-mark {
   background: var(--muted-2);
 }
 
-/* Denetim turu (#31): .pred-sealed/.pred-sealed-title/.pred-sealed-sub
-   ölüydü (akordiyon .match-acc-sealed* kullanıyor) — kaldırıldı;
-   .pred-sealed-avatars canlı, korunur. */
-
-.pred-sealed-avatars {
-  display: flex;
-  gap: 5px;
-  margin-top: 9px;
-}
 
 /* ---------- Modal ---------- */
 
@@ -2046,16 +2017,6 @@ body.league-tsl .brand-mark {
   color: var(--muted);
 }
 
-.sealed-note {
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  background: rgba(255, 208, 92, 0.06);
-  border: 1px dashed rgba(255, 208, 92, 0.35);
-  color: var(--gold);
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 14px;
-}
 
 .pred-cards {
   display: grid;
@@ -2468,7 +2429,7 @@ body.league-tsl .brand-mark {
   font-weight: 750;
 }
 
-/* "girdi" rozeti: bu oyuncunun maça mühürlü tahmini var (değerü gizli). */
+/* "girdi" rozeti: bu oyuncunun maça kayıtlı tahmini var (#39). */
 .entry-badge {
   flex-shrink: 0;
   padding: 2px 7px;
